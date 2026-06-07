@@ -1,7 +1,7 @@
 // Using Festival-Rust solver (Festival C++ ported to Rust/WASM)
 
-const DATA = {
-  w: 10,
+const LEVEL_DATA = {
+  w: 10,          // Width of the sokoban level
   h: 10,
   solution: {
     current: 0,
@@ -14,7 +14,7 @@ const DATA = {
 
 const resetSolverUI = () => {
   // Reset solver UI to initial state
-  const calcButton = document.querySelector('.calc')
+  const solveButton = document.querySelector('.solve')
   const prevButton = document.querySelector('.prev')
   const nextButton = document.querySelector('.next')
 
@@ -23,13 +23,13 @@ const resetSolverUI = () => {
   nextButton.classList.add('d-none')
 
   // Reset button text and state
-  calcButton.removeAttribute('disabled')
-  calcButton.textContent = 'Solve';
+  solveButton.removeAttribute('disabled')
+  solveButton.textContent = 'Solve';
 
   // Clear solution data
-  DATA.solution.current = 0
-  DATA.solution.directions = ''
-  DATA.solution.states = []
+  LEVEL_DATA.solution.current = 0
+  LEVEL_DATA.solution.directions = ''
+  LEVEL_DATA.solution.states = []
 }
 
 const updateGridSize = () => {
@@ -44,8 +44,8 @@ const updateGridSize = () => {
   const availableHeight = mainAreaRect.height - 32 // 32px for padding
 
   // Calculate cell size based on both width and height constraints
-  const cellSizeByWidth = Math.floor(availableWidth / DATA.w)
-  const cellSizeByHeight = Math.floor(availableHeight / DATA.h)
+  const cellSizeByWidth = Math.floor(availableWidth / LEVEL_DATA.w)
+  const cellSizeByHeight = Math.floor(availableHeight / LEVEL_DATA.h)
 
   // Use the smaller of the two to ensure the grid fits in both dimensions
   const cellSize = Math.min(cellSizeByWidth, cellSizeByHeight)
@@ -53,8 +53,8 @@ const updateGridSize = () => {
   // Ensure minimum cell size
   const finalCellSize = Math.max(cellSize, 20)
 
-  const actualGridWidth = finalCellSize * DATA.w
-  const actualGridHeight = finalCellSize * DATA.h
+  const actualGridWidth = finalCellSize * LEVEL_DATA.w
+  const actualGridHeight = finalCellSize * LEVEL_DATA.h
 
   // Set the grid dimensions
   grid.style.width = `${actualGridWidth}px`
@@ -69,17 +69,17 @@ const updateGridSize = () => {
     cellSize: finalCellSize,
     gridWidth: actualGridWidth,
     gridHeight: actualGridHeight,
-    gridDimensions: `${DATA.w}x${DATA.h}`
+    gridDimensions: `${LEVEL_DATA.w}x${LEVEL_DATA.h}`
   })
 }
 
 const setupInitialGrid = () => {
   const grid = document.querySelector('.grid')
   grid.innerHTML = ''
-  for (let wi = 0; wi < DATA.h; wi++) {
+  for (let wi = 0; wi < LEVEL_DATA.h; wi++) {
     const row = document.createElement('div')
     row.classList.add('row', 'gx-0', `row-${wi}`)
-    for (let hi = 0; hi < DATA.w; hi++) {
+    for (let hi = 0; hi < LEVEL_DATA.w; hi++) {
       const cell = document.createElement('div')
       cell.classList.add('cell', `cell-${wi}-${hi}`)
       cell.setAttribute('data-type', 'floor')
@@ -117,24 +117,24 @@ const bindClicks = () => {
     window.location.href = window.location.origin + window.location.pathname
   })
 
-  document.querySelector('.calc').addEventListener('click', function (event) {
+  document.querySelector('.solve').addEventListener('click', function (event) {
     calculate()
   })
   document.querySelector('.next').addEventListener('click', function (event) {
-    if (DATA.solution.current + 1 < DATA.solution.states.length) {
-      DATA.solution.current++
-      displayState(DATA.solution.states[DATA.solution.current])
+    if (LEVEL_DATA.solution.current + 1 < LEVEL_DATA.solution.states.length) {
+      LEVEL_DATA.solution.current++
+      displayState(LEVEL_DATA.solution.states[LEVEL_DATA.solution.current])
     }
   })
   document.querySelector('.prev').addEventListener('click', function (event) {
-    if (DATA.solution.current > 0) {
-      DATA.solution.current--
-      displayState(DATA.solution.states[DATA.solution.current])
+    if (LEVEL_DATA.solution.current > 0) {
+      LEVEL_DATA.solution.current--
+      displayState(LEVEL_DATA.solution.states[LEVEL_DATA.solution.current])
     }
   })
   document.querySelector('.save').addEventListener('click', async function (event) {
     await save()
-    await loadLevel(DATA.current)
+    await loadLevel(LEVEL_DATA.current)
   })
 
   document.querySelector('.export').addEventListener('click', function (event) {
@@ -142,15 +142,15 @@ const bindClicks = () => {
   })
 
   document.querySelector('.reset').addEventListener('click', function (event) {
-    loadLevel(DATA.current)
+    loadLevel(LEVEL_DATA.current)
   })
 
   document.querySelector('.grid-set-select').addEventListener('change', async function (event) {
     const gridSetPath = event.target.value
     await loadLevelList(gridSetPath)
     // Load the first level in the new grid set
-    if (DATA.levels.length > 0) {
-      loadLevel(DATA.levels[0].name)
+    if (LEVEL_DATA.levels.length > 0) {
+      loadLevel(LEVEL_DATA.levels[0].name)
     }
   })
 
@@ -160,14 +160,14 @@ const bindClicks = () => {
   document.querySelector('.right').addEventListener('click', function (event) { executeManualMove('r') })
 
   document.querySelector('.new').addEventListener('click', async function (event) {
-    const levelName = window.prompt('New grid name', DATA.current)
+    const levelName = window.prompt('New grid name', LEVEL_DATA.current)
     if (levelName !== null) {
       const gridWidthText = window.prompt('Grid size, eg 8x8', '8x8')
       if (gridWidthText !== null) {
-        DATA.current = levelName
+        LEVEL_DATA.current = levelName
         const gridWidthTextSplit = gridWidthText.match(/(?:\d+\.)?\d+/g)
-        DATA.w = parseInt(gridWidthTextSplit[0])
-        DATA.h = parseInt(gridWidthTextSplit[1])
+        LEVEL_DATA.w = parseInt(gridWidthTextSplit[0])
+        LEVEL_DATA.h = parseInt(gridWidthTextSplit[1])
         setupInitialGrid()
         await save()
         await loadLevel(levelName)
@@ -190,14 +190,15 @@ const bindClicks = () => {
         window.location.reload()
       } else {
         // User cancelled, reset dropdown to current level
-        event.target.value = DATA.current
+        event.target.value = LEVEL_DATA.current
       }
     } else {
       // Normal level selection
       loadLevel(event.target.value)
     }
   })
-  document.addEventListener('keyup', function (e) {
+  // MOVE KEYS
+  document.addEventListener('keydown', function (e) {
     // console.log('e', e.key)
     if (e.key === 'ArrowLeft' || e.key === 'a') {
       executeManualMove('l')
@@ -207,8 +208,8 @@ const bindClicks = () => {
       executeManualMove('u')
     } else if (e.key === 'ArrowDown' || e.key === 's') {
       executeManualMove('d')
-    } else if (e.key === 'Escape' || e.key === ' ') {
-      loadLevel(DATA.current)
+    } else if (e.key === 'Escape' || e.key === 'r') {
+      loadLevel(LEVEL_DATA.current)
     }
   })
 
@@ -254,7 +255,7 @@ const bindClicks = () => {
       } else if (direction.includes('down')) {
         executeManualMove('d')
       } else if (direction.includes('start')) {
-        loadLevel(DATA.current)
+        loadLevel(LEVEL_DATA.current)
       }
     }
   } catch (error) {
@@ -263,12 +264,12 @@ const bindClicks = () => {
 }
 const save = async () => {
   const text = gridToText()
-  console.log('save', DATA.current, text)
+  console.log('save', LEVEL_DATA.current, text)
   const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
 
-  const level = savedLevels.find(l => l.name === DATA.current)
+  const level = savedLevels.find(l => l.name === LEVEL_DATA.current)
   if (level === undefined) {
-    const newLevel = { name: DATA.current, grid: text, solution: '' }
+    const newLevel = { name: LEVEL_DATA.current, grid: text, solution: '' }
     savedLevels.push(newLevel)
   } else {
     level.grid = text
@@ -279,9 +280,9 @@ const save = async () => {
 
 const exportToUrl = () => {
   const state = {
-    name: DATA.current,
-    width: DATA.w,
-    height: DATA.h,
+    name: LEVEL_DATA.current,
+    width: LEVEL_DATA.w,
+    height: LEVEL_DATA.h,
     grid: gridToText()
   }
 
@@ -342,22 +343,22 @@ const importFromUrl = () => {
       solution: ''
     }
 
-    // Check if level already exists in DATA.levels
-    const existingLevelIndex = DATA.levels.findIndex(l => l.name === name)
+    // Check if level already exists in LEVEL_DATA.levels
+    const existingLevelIndex = LEVEL_DATA.levels.findIndex(l => l.name === name)
     if (existingLevelIndex !== -1) {
       // Update existing level
-      DATA.levels[existingLevelIndex] = importedLevel
+      LEVEL_DATA.levels[existingLevelIndex] = importedLevel
     } else {
       // Add new level to the list
-      DATA.levels.push(importedLevel)
+      LEVEL_DATA.levels.push(importedLevel)
       // Don't sort - keep the order from the .txt file
-      // DATA.levels.sort((a, b) => a.name.localeCompare(b.name))
+      // LEVEL_DATA.levels.sort((a, b) => a.name.localeCompare(b.name))
     }
 
     // Update the select dropdown
     const loadSelect = document.querySelector('.load-select')
     loadSelect.innerHTML = ''
-    DATA.levels.forEach(level => {
+    LEVEL_DATA.levels.forEach(level => {
       const option = document.createElement('option')
       option.setAttribute('value', level.name)
       option.innerText = level.name
@@ -372,10 +373,10 @@ const importFromUrl = () => {
     resetOption.style.fontWeight = 'bold'
     loadSelect.append(resetOption)
 
-    // Update DATA with imported level
-    DATA.current = name
-    DATA.w = width
-    DATA.h = height
+    // Update LEVEL_DATA with imported level
+    LEVEL_DATA.current = name
+    LEVEL_DATA.w = width
+    LEVEL_DATA.h = height
 
     // Setup grid and load the imported state
     setupInitialGrid()
@@ -407,9 +408,9 @@ const importFromUrl = () => {
 }
 const getGridState = () => {
   const state = []
-  for (let wi = 0; wi < DATA.h; wi++) {
+  for (let wi = 0; wi < LEVEL_DATA.h; wi++) {
     const row = []
-    for (let hi = 0; hi < DATA.w; hi++) {
+    for (let hi = 0; hi < LEVEL_DATA.w; hi++) {
       const dataType = document.querySelector(`.cell-${wi}-${hi}`).getAttribute('data-type')
       row.push(dataType)
     }
@@ -418,8 +419,8 @@ const getGridState = () => {
   return state
 }
 const getPlayerPos = (state) => {
-  for (let wi = 0; wi < DATA.h; wi++) {
-    for (let hi = 0; hi < DATA.w; hi++) {
+  for (let wi = 0; wi < LEVEL_DATA.h; wi++) {
+    for (let hi = 0; hi < LEVEL_DATA.w; hi++) {
       if (state[wi][hi].includes('player')) {
         return { y: wi, x: hi }
       }
@@ -452,9 +453,9 @@ const executeManualMove = (direction) => {
   displayState(nextState)
   if (isEnd(nextState)) {
     setTimeout(function () {
-      const currentLevelIndex = DATA.levels.findIndex(l => l.name === DATA.current)
-      if (currentLevelIndex + 1 < DATA.levels.length) {
-        loadLevel(DATA.levels[currentLevelIndex + 1].name)
+      const currentLevelIndex = LEVEL_DATA.levels.findIndex(l => l.name === LEVEL_DATA.current)
+      if (currentLevelIndex + 1 < LEVEL_DATA.levels.length) {
+        loadLevel(LEVEL_DATA.levels[currentLevelIndex + 1].name)
       }
     }, 100)
   }
@@ -497,20 +498,20 @@ const calculateNextStateFromDirection = (direction, currentState) => {
   return nextState
 }
 const populateSolutionStates = () => {
-  DATA.solution.states = [getGridState()]
-  console.log('DATA.solution.states', DATA.solution.states)
-  DATA.solution.directions.split('').forEach(direction => {
-    const nextState = calculateNextStateFromDirection(direction, DATA.solution.states[DATA.solution.states.length - 1])
-    DATA.solution.states.push(nextState)
+  LEVEL_DATA.solution.states = [getGridState()]
+  console.log('LEVEL_DATA.solution.states', LEVEL_DATA.solution.states)
+  LEVEL_DATA.solution.directions.split('').forEach(direction => {
+    const nextState = calculateNextStateFromDirection(direction, LEVEL_DATA.solution.states[LEVEL_DATA.solution.states.length - 1])
+    LEVEL_DATA.solution.states.push(nextState)
   })
-  DATA.solution.current = 0
-  console.log('DATA.solution END', DATA.solution)
+  LEVEL_DATA.solution.current = 0
+  console.log('LEVEL_DATA.solution END', LEVEL_DATA.solution)
 }
 const gridToText = () => {
   const textList = []
-  for (let wi = 0; wi < DATA.h; wi++) {
+  for (let wi = 0; wi < LEVEL_DATA.h; wi++) {
     let text = []
-    for (let hi = 0; hi < DATA.w; hi++) {
+    for (let hi = 0; hi < LEVEL_DATA.w; hi++) {
       const cell = document.querySelector(`.cell-${wi}-${hi}`)
       const dataType = cell.getAttribute('data-type')
       switch (dataType) {
@@ -528,7 +529,7 @@ const gridToText = () => {
   return textList
 }
 const displayState = (state) => {
-  //   console.log('displayState', state)
+   //  console.log('displayState', state)
   for (let wi = 0; wi < state.length; wi++) {
     const row = state[wi]
     for (let hi = 0; hi < row.length; hi++) {
@@ -543,24 +544,24 @@ const sleep = (ms) => {
 
 const calculate = async () => {
   console.log('calculate')
-  const calcButton = document.querySelector('.calc')
-  calcButton.setAttribute('disabled', 'disabled')
-  calcButton.textContent = 'Solving...'
+  const solveButton = document.querySelector('.solve')
+  solveButton.setAttribute('disabled', 'disabled')
+  solveButton.textContent = 'Solving...'
 
   await sleep(100) // To allow button to be disabled
   const gridText = gridToText()
   const gridWidth = gridText[0].length
-  const level = DATA.levels.find(l => l.name === DATA.current)
+  const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current)
   const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
 
   if (gridText.join('\n') === savedGrid.join('\n') && level.solution !== '') {
     console.log('calcuate cached', gridText, savedGrid)
-    DATA.solution.directions = level.solution
+    LEVEL_DATA.solution.directions = level.solution
 
     populateSolutionStates()
-    calcButton.removeAttribute('disabled')
-    calcButton.textContent = 'Solve';
-    calcButton.classList.add('d-none')
+    solveButton.removeAttribute('disabled')
+    solveButton.textContent = 'Solve';
+    solveButton.classList.add('d-none')
     document.querySelector('.prev').classList.remove('d-none')
     document.querySelector('.next').classList.remove('d-none')
     return
@@ -579,7 +580,7 @@ const calculate = async () => {
 
     const progressCallback = (progress) => {
       const { explored, frontier, iterations, timeElapsed } = progress;
-      calcButton.textContent = `Solving... ${timeElapsed}s (${explored} explored)`;
+      solveButton.textContent = `Solving... ${timeElapsed}s (${explored} explored)`;
     };
 
     const solverPromise = solverFunction('astar', gridText, progressCallback, 60000)
@@ -605,8 +606,8 @@ const calculate = async () => {
   }
 
   // Reset button state
-  calcButton.removeAttribute('disabled')
-  calcButton.textContent = 'Solve';
+  solveButton.removeAttribute('disabled')
+  solveButton.textContent = 'Solve';
 
   if (solution === 'x') {
     window.alert('No solution found')
@@ -615,19 +616,19 @@ const calculate = async () => {
     return
   } else {
     const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
-    const savedLevel = savedLevels.find(l => l.name === DATA.current)
+    const savedLevel = savedLevels.find(l => l.name === LEVEL_DATA.current)
 
     if (savedLevel === undefined) {
-      savedLevels.push({ name: DATA.current, grid: gridText, solution })
+      savedLevels.push({ name: LEVEL_DATA.current, grid: gridText, solution })
     } else {
       savedLevel.solution = solution
     }
     window.localStorage.setItem('sok', JSON.stringify(savedLevels))
     level.solution = solution
-    DATA.solution.directions = solution
+    LEVEL_DATA.solution.directions = solution
 
     populateSolutionStates()
-    calcButton.classList.add('d-none')
+    solveButton.classList.add('d-none')
     document.querySelector('.prev').classList.remove('d-none')
     document.querySelector('.next').classList.remove('d-none')
   }
@@ -667,11 +668,11 @@ const loadLevelList = async (gridSetPath = 'grids/Base-Levels.txt') => {
   // Don't sort - keep the order from the .txt file
   // levels.sort((a, b) => a.name.localeCompare(b.name))
 
-  DATA.levels = levels
-  console.log('DATA.levels', DATA.levels)
+  LEVEL_DATA.levels = levels
+  console.log('LEVEL_DATA.levels', LEVEL_DATA.levels)
   const loadSelect = document.querySelector('.load-select')
   loadSelect.innerHTML = ''
-  DATA.levels.forEach(level => {
+  LEVEL_DATA.levels.forEach(level => {
     const option = document.createElement('option')
     option.setAttribute('value', level.name)
     option.innerText = level.name
@@ -703,13 +704,13 @@ const convertToDataType = (sign) => {
   return 'floor'
 }
 const loadLevel = async (levelName) => {
-  const level = DATA.levels.filter(l => l.name === levelName)[0]
+  const level = LEVEL_DATA.levels.filter(l => l.name === levelName)[0]
   console.log('loadLevel res', levelName, level)
-  DATA.current = levelName
-  DATA.h = level.grid.length
-  //   console.log('DATA.h', DATA.h)
-  DATA.w = Math.max(...level.grid.map(row => row.replace('\n', '').split('').length))
-  //   console.log('DATA.w', DATA.w)
+  LEVEL_DATA.current = levelName
+  LEVEL_DATA.h = level.grid.length
+  //   console.log('LEVEL_DATA.h', LEVEL_DATA.h)
+  LEVEL_DATA.w = Math.max(...level.grid.map(row => row.replace('\n', '').split('').length))
+  //   console.log('LEVEL_DATA.w', LEVEL_DATA.w)
   setupInitialGrid()
   for (let wi = 0; wi < level.grid.length; wi++) {
     const row = level.grid[wi].replace('\n', '').split('')
@@ -723,7 +724,7 @@ const loadLevel = async (levelName) => {
   document.querySelector('.load-select').value = levelName
   document.querySelector('.prev').classList.add('d-none')
   document.querySelector('.next').classList.add('d-none')
-  document.querySelector('.calc').classList.remove('d-none')
+  document.querySelector('.solve').classList.remove('d-none')
 
   // Ensure grid is properly sized after level is loaded
   setTimeout(updateGridSize, 10)
@@ -736,8 +737,8 @@ const initSolver = async () => {
 
   // console.log('solverCodeText', solverCodeText)
   const solveSokodan = pyodide.runPython(solverCodeText)
-  document.querySelector('.calc').removeAttribute('disabled')
-  document.querySelector('.calc').textContent = 'Solve (Python)'
+  document.querySelector('.solve').removeAttribute('disabled')
+  document.querySelector('.solve').textContent = 'Solve (Python)'
   return solveSokodan
 }
 
@@ -751,7 +752,7 @@ const init = async () => {
 
   if (!importedFromUrl) {
     // Load default level if no URL import
-    await loadLevel(DATA.levels[0].name)
+    await loadLevel(LEVEL_DATA.levels[0].name)
   }
 
   bindClicks()
@@ -765,7 +766,7 @@ const init = async () => {
 
   // Enable solve button
   console.log('Festival-Rust solver ready');
-  document.querySelector('.calc').removeAttribute('disabled');
-  document.querySelector('.calc').textContent = 'Solve';
+  document.querySelector('.solve').removeAttribute('disabled');
+  document.querySelector('.solve').textContent = 'Solve';
 }
 init()
