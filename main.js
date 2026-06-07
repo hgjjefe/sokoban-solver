@@ -497,6 +497,7 @@ const calculateNextStateFromDirection = (direction, currentState) => {
   }
   return nextState
 }
+
 const populateSolutionStates = () => {
   LEVEL_DATA.solution.states = [getGridState()]
   console.log('LEVEL_DATA.solution.states', LEVEL_DATA.solution.states)
@@ -554,18 +555,19 @@ const calculate = async () => {
   const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current)
   const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
 
-  if (gridText.join('\n') === savedGrid.join('\n') && level.solution !== '') {
-    console.log('calcuate cached', gridText, savedGrid)
-    LEVEL_DATA.solution.directions = level.solution
+  // DISABLE this to avoid saving LEVEL DATA
+  // if (gridText.join('\n') === savedGrid.join('\n') && level.solution !== '') {
+  //   console.log('calcuate cached', gridText, savedGrid)
+  //   LEVEL_DATA.solution.directions = level.solution
 
-    populateSolutionStates()
-    solveButton.removeAttribute('disabled')
-    solveButton.textContent = 'Solve';
-    solveButton.classList.add('d-none')
-    document.querySelector('.prev').classList.remove('d-none')
-    document.querySelector('.next').classList.remove('d-none')
-    return
-  }
+  //   populateSolutionStates()
+  //   solveButton.removeAttribute('disabled')
+  //   solveButton.textContent = 'Solve';
+  //   solveButton.classList.add('d-none')
+  //   document.querySelector('.prev').classList.remove('d-none')
+  //   document.querySelector('.next').classList.remove('d-none')
+  //   return
+  // }
 
   let solution;
 
@@ -586,6 +588,7 @@ const calculate = async () => {
     const solverPromise = solverFunction('astar', gridText, progressCallback, 60000)
       .then(([solutionResult, timeStr]) => {
         console.log(`${solverName} completed in ${timeStr}`);
+        //console.log("Explored:", explored);
         return solutionResult;
       });
 
@@ -631,6 +634,7 @@ const calculate = async () => {
     solveButton.classList.add('d-none')
     document.querySelector('.prev').classList.remove('d-none')
     document.querySelector('.next').classList.remove('d-none')
+
   }
 }
 const loadLevelList = async (gridSetPath = 'grids/Base-Levels.txt') => {
