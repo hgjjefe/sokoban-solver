@@ -18,12 +18,12 @@ async function solveFestivalRust(method, gridText, progressCallback = null, time
     return new Promise((resolve, reject) => {
         // Set up message handler
         worker.onmessage = function(e) {
-            const { type, progress, solution, timeStr, error } = e.data;
+            const { type, progress, solution, timeStr, error, nodesSearched } = e.data;
             
             if (type === 'progress' && progressCallback) {
                 progressCallback(progress);
             } else if (type === 'success') {
-                resolve([solution, timeStr]);
+                resolve([solution, timeStr, nodesSearched]);
             } else if (type === 'error') {
                 reject(new Error(error));
             }

@@ -500,7 +500,7 @@ const calculateNextStateFromDirection = (direction, currentState) => {
 
 const populateSolutionStates = () => {
   LEVEL_DATA.solution.states = [getGridState()]
-  console.log('LEVEL_DATA.solution.states', LEVEL_DATA.solution.states)
+  // console.log('LEVEL_DATA.solution.states', LEVEL_DATA.solution.states)
   LEVEL_DATA.solution.directions.split('').forEach(direction => {
     const nextState = calculateNextStateFromDirection(direction, LEVEL_DATA.solution.states[LEVEL_DATA.solution.states.length - 1])
     LEVEL_DATA.solution.states.push(nextState)
@@ -579,16 +579,15 @@ const calculate = async () => {
     if (!solverFunction) {
       throw new Error('Festival-Rust solver not loaded');
     }
-
+    // Update solve progress data on button text
     const progressCallback = (progress) => {
       const { explored, frontier, iterations, timeElapsed } = progress;
       solveButton.textContent = `Solving... ${timeElapsed}s (${explored} explored)`;
     };
 
     const solverPromise = solverFunction('astar', gridText, progressCallback, 60000)
-      .then(([solutionResult, timeStr]) => {
-        console.log(`${solverName} completed in ${timeStr}`);
-        //console.log("Explored:", explored);
+      .then(([solutionResult, timeStr, nodesSearched]) => {
+        console.log(`${solverName} completed in ${timeStr} with ${nodesSearched} nodes explored.`);
         return solutionResult;
       });
 
@@ -637,7 +636,7 @@ const calculate = async () => {
 
   }
 }
-const loadLevelList = async (gridSetPath = 'grids/Base-Levels.txt') => {
+const loadLevelList = async (gridSetPath = 'grids/Boxworld.txt') => {
   const req = await fetch(gridSetPath)
   const res = await req.text()
   const levels = res.split('Level:').filter(t => t !== '').map(l => {
@@ -733,18 +732,18 @@ const loadLevel = async (levelName) => {
   // Ensure grid is properly sized after level is loaded
   setTimeout(updateGridSize, 10)
 }
-const initSolver = async () => {
-  const pyodide = await window.loadPyodide()
-  await pyodide.loadPackage(['numpy'])
+// const initSolver = async () => {
+//   const pyodide = await window.loadPyodide()
+//   await pyodide.loadPackage(['numpy'])
 
-  const solverCodeText = await (await fetch('solver.py')).text()
+//   const solverCodeText = await (await fetch('solver.py')).text()
 
-  // console.log('solverCodeText', solverCodeText)
-  const solveSokodan = pyodide.runPython(solverCodeText)
-  document.querySelector('.solve').removeAttribute('disabled')
-  document.querySelector('.solve').textContent = 'Solve (Python)'
-  return solveSokodan
-}
+//   // console.log('solverCodeText', solverCodeText)
+//   const solveSokodan = pyodide.runPython(solverCodeText)
+//   document.querySelector('.solve').removeAttribute('disabled')
+//   document.querySelector('.solve').textContent = 'Solve (Python)'
+//   return solveSokodan
+// }
 
 const init = async () => {
   console.log('init')

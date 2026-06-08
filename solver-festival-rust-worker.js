@@ -36,7 +36,14 @@ self.onmessage = async function(e) {
                     }
                 });
             };
-            
+            // result: SolveResult {
+                // solved: true,
+                // solution: Some(solution.clone()),
+                // moves: solution.len(),
+                // pushes,
+                // nodes_searched,
+                // time_ms: elapsed,
+                // fail_reason: None }
             const result = solver.solve(level, timeoutMs, progressCallback);
             const endTime = performance.now();
             const timeStr = ((endTime - startTime) / 1000).toFixed(2) + ' seconds';
@@ -45,7 +52,8 @@ self.onmessage = async function(e) {
                 self.postMessage({
                     type: 'success',
                     solution: result.solution,
-                    timeStr: timeStr
+                    timeStr: timeStr,
+                    nodesSearched: result.nodes_searched
                 });
             } else {
                 self.postMessage({
