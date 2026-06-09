@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Using Festival-Rust solver (Festival C++ ported to Rust/WASM)
-import { solveTypescript } from "./src/typescript-solver/solver-typescript.js";
+import { solveTypescript } from "./typescript-solver/solver-typescript.js";
 
 export {};
 // ============ DATA STRUCTURES ==============

@@ -1,6 +1,40 @@
 
 
-export function solveTypescript(gridText: string[], progressCallback: (progress: any)=> void, timeoutMs: number) : [string, number]{
 
-    return ['uDlR', 69420]
+// export async function solveTypescript(gridText: string[], progressCallback: (progress: any)=> void, timeoutMs: number) : Promise<[string, number]>{
+//     let exploredCount = 69420;
+
+//     return ["No solution", exploredCount];
+// }
+
+export function solveTypescript(
+    gridText: string[], 
+    progressCallback: (progress: { explored: number; timeElapsed: number }) => void, 
+    timeoutMs: number = 60000,
+    signal?: AbortSignal
+): Promise<[string, number]> {
+    return new Promise((resolve, reject) => {
+        const worker = new Worker('/typescript-solver/solver-typescript-worker.js', { type: 'module' });
+
+        worker.onmessage = (e) => {
+            const { type, payload } = e.data;
+            if (type === 'DEBUG'){
+               let {text,data} = payload;
+                console.log(`${type}: ${text}`, data);
+            }
+            else if (type === 'PROGRESS') progressCallback(payload);
+            else if (type === 'SUCCESS') { worker.terminate(); resolve(payload); }
+            else if (type === 'TIMEOUT') { worker.terminate(); resolve(["Timeout", payload]); }
+            else{
+                console.log(`Error: unknown message type "${type}" from worker`)
+            }
+        };
+
+        if (signal) {
+            if (signal.aborted) { worker.terminate(); return reject(new DOMException("Aborted", "AbortError")); }
+            signal.addEventListener('abort', () => { worker.terminate(); reject(new DOMException("Aborted", "AbortError")); });
+        }
+
+        worker.postMessage({ gridText, timeoutMs });
+    });
 }

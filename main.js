@@ -1,7 +1,6 @@
 // @ts-nocheck
 // Using Festival-Rust solver (Festival C++ ported to Rust/WASM)
-import { solveTypescript } from "./src/typescript-solver/solver-typescript.js";
-export {};
+import { solveTypescript } from "./typescript-solver/solver-typescript.js";
 // ============ ACTUAL CODE STARTS HERE ==============
 const LEVEL_DATA = {
     w: 10, // Width of the sokoban level
