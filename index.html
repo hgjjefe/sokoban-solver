@@ -139,15 +139,35 @@
 </head>
 
 <body>
-    <div class="header">
+    <div class="header py-3">
         <div class="container">
-            <h1 class="mb-0 fs-2">
-                <span class="title-link" title="Click to refresh and clear URL parameters">Sokoban Solver</span>
-                <a href="https://github.com/dangarfield/sokoban-solver" class="github-link"
-                    title="View source code on GitHub">
-                    <i class="bi bi-github"></i>
-                </a>
-            </h1>
+            <div class="row align-items-center">
+                
+                <div class="col-3 d-none d-sm-block"></div>
+                
+                <div class="col-12 col-sm-6 text-center">
+                    <h1 class="mb-0 fs-2 d-inline-block">
+                        <span class="title-link" title="Click to refresh and clear URL parameters">Sokoban Solver</span>
+                        <a href="https://github.com/dangarfield/sokoban-solver" class="github-link" title="View source code on GitHub">
+                            <i class="bi bi-github"></i>
+                        </a>
+                    </h1>
+                </div>
+                
+                <div class="col-12 col-sm-3 d-flex justify-content-center justify-content-sm-end mt-2 mt-sm-0">
+                    <div style="max-width: 220px; width: 100%;">
+                        <div class="input-group input-group-sm">
+                            <label class="input-group-text bg-secondary text-white" for="solver-select">Engine</label>
+                            
+                            <select class="form-select solver-select" id="solver-select" title="Select Solver">
+                                <option value="festival-rust" selected>Festival Rust</option>
+                                <option value="typescript">Typescript</option>
+                            </select>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -160,7 +180,7 @@
             <div class="buttons">
                 <form class="row gy-2 gx-2 align-items-center justify-content-center">
                     <div class="col-auto">
-                        <select class="form-select grid-set-select">
+                        <select class="form-select grid-set-select" title="Select Map Pack">
                             <option value="grids/Boxworld.txt" selected>Boxworld</option>
                             <option value="grids/Base-Levels.txt">Base Levels</option>
                             <option value="grids/LOMA.txt">LOMA</option>
@@ -211,9 +231,10 @@
                         </select>
                     </div>
                     <div class="col-auto">
-                        <select class="form-select load-select">
+                        <select class="form-select load-select" title="Select Level">
                         </select>
                     </div>
+                    
                     <div class="col-auto">
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-sm btn-primary new"><i class="bi bi-plus"></i></button>

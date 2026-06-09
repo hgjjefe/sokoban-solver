@@ -548,12 +548,15 @@ const calculate = async () => {
   const solveButton = document.querySelector('.solve')
   solveButton.setAttribute('disabled', 'disabled')
   solveButton.textContent = 'Solving...'
+  // NEW CODE
+  const currentSolver = document.querySelector('.solver-select').value;
 
   await sleep(100) // To allow button to be disabled
   const gridText = gridToText()
   const gridWidth = gridText[0].length
   const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current)
-  const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
+  
+  //const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
 
   // DISABLE this to avoid saving LEVEL DATA
   // if (gridText.join('\n') === savedGrid.join('\n') && level.solution !== '') {
@@ -568,6 +571,10 @@ const calculate = async () => {
   //   document.querySelector('.next').classList.remove('d-none')
   //   return
   // }
+  if (currentSolver === 'typescript'){
+      console.log("This solver is not yet implemented");
+      return;
+  }
 
   let solution;
 
