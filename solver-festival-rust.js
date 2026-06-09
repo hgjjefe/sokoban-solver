@@ -9,7 +9,7 @@ function initWorker() {
     return worker;
 }
 
-async function solveFestivalRust(method, gridText, progressCallback = null, timeoutMs = 60000) {
+async function solveFestivalRust(gridText, progressCallback = null, timeoutMs = 60000) {
     // Convert array to string if needed
     const levelString = Array.isArray(gridText) ? gridText.join('\n') : gridText;
     
@@ -18,12 +18,12 @@ async function solveFestivalRust(method, gridText, progressCallback = null, time
     return new Promise((resolve, reject) => {
         // Set up message handler
         worker.onmessage = function(e) {
-            const { type, progress, solution, timeStr, error, nodesSearched } = e.data;
+            const { type, progress, solution, error, nodesSearched } = e.data;
             
             if (type === 'progress' && progressCallback) {
                 progressCallback(progress);
             } else if (type === 'success') {
-                resolve([solution, timeStr, nodesSearched]);
+                resolve([solution, nodesSearched]);
             } else if (type === 'error') {
                 reject(new Error(error));
             }

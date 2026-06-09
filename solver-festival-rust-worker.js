@@ -22,7 +22,7 @@ self.onmessage = async function(e) {
             await init();
             
             const solver = new FestivalSolver();
-            const startTime = performance.now();
+            // const startTime = performance.now();
             
             // Progress callback that posts to main thread
             const progressCallback = (progress) => {
@@ -45,14 +45,13 @@ self.onmessage = async function(e) {
                 // time_ms: elapsed,
                 // fail_reason: None }
             const result = solver.solve(level, timeoutMs, progressCallback);
-            const endTime = performance.now();
-            const timeStr = ((endTime - startTime) / 1000).toFixed(2) + ' seconds';
+            // const endTime = performance.now();
+            // const timeStr = ((endTime - startTime) / 1000).toFixed(2) + ' seconds';
             
             if (result.solved) {
                 self.postMessage({
                     type: 'success',
                     solution: result.solution,
-                    timeStr: timeStr,
                     nodesSearched: result.nodes_searched
                 });
             } else {

@@ -1,4 +1,6 @@
+// @ts-nocheck
 // Using Festival-Rust solver (Festival C++ ported to Rust/WASM)
+import { solveTypescript } from "./src/typescript-solver/solver-typescript.js";
 export {};
 // ============ ACTUAL CODE STARTS HERE ==============
 const LEVEL_DATA = {
@@ -51,14 +53,14 @@ const updateGridSize = () => {
     grid.style.height = `${actualGridHeight}px`;
     // Update CSS custom property for cell size
     document.documentElement.style.setProperty('--cell-size', `${finalCellSize}px`);
-    console.log('Grid updated:', {
-        availableWidth,
-        availableHeight,
-        cellSize: finalCellSize,
-        gridWidth: actualGridWidth,
-        gridHeight: actualGridHeight,
-        gridDimensions: `${LEVEL_DATA.w}x${LEVEL_DATA.h}`
-    });
+    // console.log('Grid updated:', {
+    //   availableWidth,
+    //   availableHeight,
+    //   cellSize: finalCellSize,
+    //   gridWidth: actualGridWidth,
+    //   gridHeight: actualGridHeight,
+    //   gridDimensions: `${LEVEL_DATA.w}x${LEVEL_DATA.h}`
+    // })
 };
 const setupInitialGrid = () => {
     const grid = document.querySelector('.grid');
@@ -529,7 +531,7 @@ const gridToText = () => {
     return textList;
 };
 const displayState = (state) => {
-    console.log('displayState', state);
+    // console.log('displayState', state)
     for (let wi = 0; wi < state.length; wi++) {
         const row = state[wi];
         for (let hi = 0; hi < row.length; hi++) {
@@ -547,13 +549,13 @@ const calculate = async () => {
     solveButton.setAttribute('disabled', 'disabled');
     solveButton.textContent = 'Solving...';
     // NEW CODE
-    const currentSolver = document.querySelector('.solver-select').value;
+    const solverName = document.querySelector('.solver-select').value;
     await sleep(100); // To allow button to be disabled
     const gridText = gridToText();
-    const gridWidth = gridText[0].length;
     const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current);
-    //const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
-    // DISABLE this to avoid saving LEVEL DATA
+    // DISABLE THIS TO AVOID SAVING LEVEL DATA
+    // const gridWidth = gridText[0].length
+    // const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
     // if (gridText.join('\n') === savedGrid.join('\n') && level.solution !== '') {
     //   console.log('calcuate cached', gridText, savedGrid)
     //   LEVEL_DATA.solution.directions = level.solution
@@ -565,29 +567,27 @@ const calculate = async () => {
     //   document.querySelector('.next').classList.remove('d-none')
     //   return
     // }
-    if (currentSolver === 'typescript') {
-        console.log("This solver is not yet implemented");
-        return;
-    }
     let solution;
     try {
-        // Use Festival-Rust WASM solver
-        const solverFunction = window.solveFestivalRust;
-        const solverName = 'Festival-Rust';
+        // Use Festival-Rust WASM solver by default
+        const solverFunction = (solverName === 'Festival-Rust' ? window.solveFestivalRust
+            : solverName === 'Typescript' ? solveTypescript : null);
         if (!solverFunction) {
-            throw new Error('Festival-Rust solver not loaded');
+            throw new Error(`${solverName} solver not loaded`);
         }
         // Update solve progress data on button text
         const progressCallback = (progress) => {
             const { explored, frontier, iterations, timeElapsed } = progress;
             solveButton.textContent = `Solving... ${timeElapsed}s (${explored} explored)`;
         };
-        const solverPromise = solverFunction('astar', gridText, progressCallback, 60000)
-            .then(([solutionResult, timeStr, nodesSearched]) => {
-            console.log(`${solverName} completed in ${timeStr} with ${nodesSearched} nodes explored.`);
-            return solutionResult;
-        });
-        solution = await solverPromise;
+        const startTime = performance.now();
+        // SOLVER FUNCTION OPERATES HERE
+        const [solutionResult, nodesSearched] = await solverFunction(gridText, progressCallback, 60000);
+        const endTime = performance.now();
+        const timeStr = ((endTime - startTime) / 1000).toFixed(2);
+        // GIVES INFO AFTER A SUCCESSFUL SOLVE
+        console.log(`${solverName} completed in ${timeStr} seconds with ${nodesSearched} nodes explored.`);
+        solution = solutionResult;
     }
     catch (error) {
         console.error('Solver error:', error);
@@ -606,7 +606,7 @@ const calculate = async () => {
     solveButton.removeAttribute('disabled');
     solveButton.textContent = 'Solve';
     if (solution === 'x') {
-        window.alert('No solution found');
+        //window.alert('No solution found')
     }
     else if (solution === 'timeout') {
         // Already handled above, just return
@@ -699,7 +699,7 @@ const convertToDataType = (sign) => {
 };
 const loadLevel = async (levelName) => {
     const level = LEVEL_DATA.levels.filter(l => l.name === levelName)[0];
-    console.log('loadLevel res', levelName, level);
+    // console.log('loadLevel res', levelName, level)
     LEVEL_DATA.current = levelName;
     LEVEL_DATA.h = level.grid.length;
     //   console.log('LEVEL_DATA.h', LEVEL_DATA.h)
@@ -755,4 +755,3 @@ const init = async () => {
     document.querySelector('.solve').textContent = 'Solve';
 };
 init();
-//# sourceMappingURL=main.js.map
