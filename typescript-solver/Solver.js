@@ -19,13 +19,19 @@ class Deque {
         return this.tail - this.head;
     }
 }
+const MOVES = {
+    'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1]
+};
+// ========= THE SOLVER CLASS ==========
 export class Solver {
     board;
     rows;
     cols;
     initialPlayerPos = null; // Changed to allow null
     initialBoxPositions = new Set();
+    initialBoxesOnGoal = 0;
     goalPositions = new Set();
+    goalCount;
     constructor(board) {
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
@@ -34,33 +40,36 @@ export class Solver {
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
                 const key = `${r},${c}`;
-                if (cell === '@') {
-                    this.initialPlayerPos = [r, c];
-                }
-                else if (cell === '$') {
-                    this.initialBoxPositions.add(key);
-                }
-                else if (cell === '.') {
-                    this.goalPositions.add(key);
-                }
-                else if (cell === '*') {
-                    this.initialBoxPositions.add(key);
-                    this.goalPositions.add(key);
-                }
-                else if (cell === '+') {
-                    this.initialPlayerPos = [r, c];
-                    this.goalPositions.add(key);
+                switch (cell) {
+                    case '@':
+                        this.initialPlayerPos = [r, c];
+                        break;
+                    case '$':
+                        this.initialBoxPositions.add(key);
+                        break;
+                    case '.':
+                        this.goalPositions.add(key);
+                        break;
+                    case '*':
+                        this.initialBoxPositions.add(key);
+                        this.goalPositions.add(key);
+                        this.initialBoxesOnGoal++;
+                        break;
+                    case '+':
+                        this.initialPlayerPos = [r, c];
+                        this.goalPositions.add(key);
+                        break;
                 }
             }
         }
+        this.goalCount = this.goalPositions.size;
+        console.log("initCount, goalCount:", this.initialBoxesOnGoal, this.goalCount);
     }
     getStateKey(playerPos, boxPositions) {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
         return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
     }
     isSolved(boxPositions) {
-        if (boxPositions.size !== this.goalPositions.size)
-            return false;
         for (const box of boxPositions) {
             if (!this.goalPositions.has(box))
                 return false;
@@ -69,11 +78,8 @@ export class Solver {
     }
     getNeighbors(playerPos, boxPositions) {
         const neighbors = [];
-        const moves = {
-            'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1]
-        };
         const [r, c] = playerPos;
-        for (const [moveChar, [dr, dc]] of Object.entries(moves)) {
+        for (const [moveChar, [dr, dc]] of Object.entries(MOVES)) {
             const newPlayerR = r + dr;
             const newPlayerC = c + dc;
             const newPlayerKey = `${newPlayerR},${newPlayerC}`;
@@ -113,6 +119,9 @@ export class Solver {
         if (!this.initialPlayerPos) {
             return { type: "error", message: "Error: No player found on the board", nodesSearched: 0 };
         }
+        else if (this.initialBoxPositions.size > this.goalPositions.size) {
+            return { type: "error", message: "Error: More boxes than goals", nodesSearched: 0 };
+        }
         const queue = new Deque();
         const visited = new Set();
         let nodesSearched = 0;
@@ -120,22 +129,34 @@ export class Solver {
             playerPos: this.initialPlayerPos,
             boxPositions: this.initialBoxPositions
         };
-        queue.pushBack([initialState, []]);
+        queue.pushBack([initialState, [], this.initialBoxesOnGoal]);
         visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped)
                 break;
             nodesSearched++;
-            const [{ playerPos, boxPositions }, path] = popped;
-            if (this.isSolved(boxPositions)) {
+            const [{ playerPos, boxPositions }, path, currentBoxesOnGoal] = popped;
+            // Check if solved   // Legacy check: this.isSolved(boxPositions)
+            if (this.isSolved(boxPositions) || currentBoxesOnGoal === this.goalCount) {
                 return { type: 'success', path: path.join(''), nodesSearched: nodesSearched };
             }
             for (const [nextPlayer, nextBoxes, move] of this.getNeighbors(playerPos, boxPositions)) {
                 const nextKey = this.getStateKey(nextPlayer, nextBoxes);
                 if (!visited.has(nextKey)) {
                     visited.add(nextKey);
-                    queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move]]);
+                    let nextBoxesOnGoal = currentBoxesOnGoal;
+                    const [dr, dc] = MOVES[move];
+                    const oldBoxKey = `${nextPlayer[0]},${nextPlayer[1]}`;
+                    const newBoxKey = `${nextPlayer[0] + dr},${nextPlayer[1] + dc}`;
+                    // If the player actually pushed a box (i.e. the box moved from oldBoxKey to newBoxKey)
+                    if (boxPositions.has(oldBoxKey)) {
+                        if (this.goalPositions.has(oldBoxKey))
+                            nextBoxesOnGoal--; // Left a goal
+                        if (this.goalPositions.has(newBoxKey))
+                            nextBoxesOnGoal++; // Entered a goal
+                    }
+                    queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], 0]);
                 }
             }
         }

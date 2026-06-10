@@ -1,12 +1,6 @@
 
 
 
-// export async function solveTypescript(gridText: string[], progressCallback: (progress: any)=> void, timeoutMs: number) : Promise<[string, number]>{
-//     let exploredCount = 69420;
-
-//     return ["No solution", exploredCount];
-// }
-
 export function solveTypescript(
     gridText: string[], 
     progressCallback: (progress: { explored: number; timeElapsed: number }) => void, 

@@ -30,9 +30,17 @@ interface GameState {
     playerPos: Position;
     boxPositions: Set<string>;
 }
+type Path = string[]; type BoxesOnGoal = number;
 export type SolveResult = 
     | { type: "success"; path: string; nodesSearched: number }
     | { type: "error"; message: string; nodesSearched: number };
+
+const MOVES: Record<string, [number, number]> = {
+            'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1]
+};
+
+
+// ========= THE SOLVER CLASS ==========
 
 export class Solver {
     private board: string[][];
@@ -40,33 +48,31 @@ export class Solver {
     private cols: number;
     private initialPlayerPos: Position | null = null; // Changed to allow null
     private initialBoxPositions = new Set<string>();
+    private initialBoxesOnGoal : number = 0;
     private goalPositions = new Set<string>();
+    private goalCount : number;
 
     constructor(board: string[]) {
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
         this.cols = this.board[0].length;
-
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
                 const key = `${r},${c}`;
-
-                if (cell === '@') {
-                    this.initialPlayerPos = [r, c];
-                } else if (cell === '$') {
-                    this.initialBoxPositions.add(key);
-                } else if (cell === '.') {
-                    this.goalPositions.add(key);
-                } else if (cell === '*') {
-                    this.initialBoxPositions.add(key);
-                    this.goalPositions.add(key);
-                } else if (cell === '+') {
-                    this.initialPlayerPos = [r, c];
-                    this.goalPositions.add(key);
+                switch (cell){
+                    case '@': this.initialPlayerPos = [r, c]; break;
+                    case '$': this.initialBoxPositions.add(key); break;
+                    case '.': this.goalPositions.add(key); break;
+                    case '*': this.initialBoxPositions.add(key);
+                              this.goalPositions.add(key); 
+                              this.initialBoxesOnGoal++; break;
+                    case '+': this.initialPlayerPos = [r, c];
+                              this.goalPositions.add(key); break;
                 }
             }
         }
+        this.goalCount = this.goalPositions.size;
     }
 
     private getStateKey(playerPos: Position, boxPositions: Set<string>): string {
@@ -75,7 +81,6 @@ export class Solver {
     }
 
     private isSolved(boxPositions: Set<string>): boolean {
-        if (boxPositions.size !== this.goalPositions.size) return false;
         for (const box of boxPositions) {
             if (!this.goalPositions.has(box)) return false;
         }
@@ -84,13 +89,10 @@ export class Solver {
 
     private getNeighbors(playerPos: Position, boxPositions: Set<string>): Array<[Position, Set<string>, string]> {
         const neighbors: Array<[Position, Set<string>, string]> = [];
-        const moves: Record<string, [number, number]> = {
-            'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1]
-        };
-
+        
         const [r, c] = playerPos;
 
-        for (const [moveChar, [dr, dc]] of Object.entries(moves)) {
+        for (const [moveChar, [dr, dc]] of Object.entries(MOVES)) {
             const newPlayerR = r + dr;
             const newPlayerC = c + dc;
             const newPlayerKey = `${newPlayerR},${newPlayerC}`;
@@ -136,9 +138,11 @@ export class Solver {
         // Catch the missing player error cleanly right here
         if (!this.initialPlayerPos) {
             return {type:"error", message:"Error: No player found on the board", nodesSearched: 0};
+        } else if (this.initialBoxPositions.size > this.goalPositions.size){
+            return {type:"error", message:"Error: More boxes than goals", nodesSearched: 0};
         }
 
-        const queue = new Deque<[GameState, string[]]>();
+        const queue = new Deque<[GameState, Path, BoxesOnGoal]>();
         const visited = new Set<string>();
         let nodesSearched = 0;
         const initialState: GameState = {
@@ -146,16 +150,16 @@ export class Solver {
             boxPositions: this.initialBoxPositions
         };
 
-        queue.pushBack([initialState, []]);
+        queue.pushBack([initialState, [], this.initialBoxesOnGoal]);
         visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
 
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped) break;
             nodesSearched++;
-            const [{ playerPos, boxPositions }, path] = popped;
-
-            if (this.isSolved(boxPositions)) {
+            const [{ playerPos, boxPositions }, path, currentBoxesOnGoal] = popped;
+            // Check if solved   // Legacy check: this.isSolved(boxPositions)
+            if ( this.isSolved(boxPositions) || currentBoxesOnGoal === this.goalCount ) {
                 return {type:'success', path: path.join(''), nodesSearched: nodesSearched};
             }
 
@@ -164,7 +168,19 @@ export class Solver {
                 
                 if (!visited.has(nextKey)) {
                     visited.add(nextKey);
-                    queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move]]);
+
+                    let nextBoxesOnGoal = currentBoxesOnGoal;
+                    const [dr, dc] = MOVES[move]; 
+                    const oldBoxKey = `${nextPlayer[0]},${nextPlayer[1]}`;
+                    const newBoxKey = `${nextPlayer[0] + dr},${nextPlayer[1] + dc}`;
+
+                    // If the player actually pushed a box (i.e. the box moved from oldBoxKey to newBoxKey)
+                    if (boxPositions.has(oldBoxKey)) {
+                        if (this.goalPositions.has(oldBoxKey)) nextBoxesOnGoal--; // Left a goal
+                        if (this.goalPositions.has(newBoxKey)) nextBoxesOnGoal++; // Entered a goal
+                    }
+                    
+                    queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], 0]);
                 }
             }
         }
