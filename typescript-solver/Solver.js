@@ -20,7 +20,8 @@ class Deque {
     }
 }
 const MOVES = {
-    'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1]
+    'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
+    //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
 // ========= THE SOLVER CLASS ==========
 export class Solver {
@@ -29,7 +30,7 @@ export class Solver {
     cols;
     initialPlayerPos = null; // Changed to allow null
     initialBoxPositions = new Set();
-    initialBoxesOnGoal = 0;
+    initialRawBoxCount = 0;
     goalPositions = new Set();
     goalCount;
     constructor(board) {
@@ -46,6 +47,7 @@ export class Solver {
                         break;
                     case '$':
                         this.initialBoxPositions.add(key);
+                        this.initialRawBoxCount++;
                         break;
                     case '.':
                         this.goalPositions.add(key);
@@ -53,7 +55,6 @@ export class Solver {
                     case '*':
                         this.initialBoxPositions.add(key);
                         this.goalPositions.add(key);
-                        this.initialBoxesOnGoal++;
                         break;
                     case '+':
                         this.initialPlayerPos = [r, c];
@@ -63,7 +64,6 @@ export class Solver {
             }
         }
         this.goalCount = this.goalPositions.size;
-        console.log("initCount, goalCount:", this.initialBoxesOnGoal, this.goalCount);
     }
     getStateKey(playerPos, boxPositions) {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
@@ -76,6 +76,9 @@ export class Solver {
         }
         return true;
     }
+    isInBound(playerPos) {
+        return 0 <= playerPos[0] && playerPos[0] < this.rows && 0 <= playerPos[1] && playerPos[1] < this.cols;
+    }
     getNeighbors(playerPos, boxPositions) {
         const neighbors = [];
         const [r, c] = playerPos;
@@ -83,32 +86,32 @@ export class Solver {
             const newPlayerR = r + dr;
             const newPlayerC = c + dc;
             const newPlayerKey = `${newPlayerR},${newPlayerC}`;
-            if (!(0 <= newPlayerR && newPlayerR < this.rows && 0 <= newPlayerC && newPlayerC < this.cols)) {
+            const newPlayerPos = [newPlayerR, newPlayerC];
+            // Move making player out of boound or hit a wall is not valid
+            if (!this.isInBound(newPlayerPos) || this.board[newPlayerR][newPlayerC] === '#') {
                 continue;
             }
-            if (this.board[newPlayerR][newPlayerC] === '#') {
-                continue;
-            }
+            // Push a box
             if (boxPositions.has(newPlayerKey)) {
                 const newBoxR = newPlayerR + dr;
                 const newBoxC = newPlayerC + dc;
                 const newBoxKey = `${newBoxR},${newBoxC}`;
-                if (!(0 <= newBoxR && newBoxR < this.rows && 0 <= newBoxC && newBoxC < this.cols)) {
+                const newBoxPos = [newBoxR, newBoxC];
+                // Box cannot be pushed to out of bounds or another box or a wall
+                if (!this.isInBound(newBoxPos)
+                    || boxPositions.has(newBoxKey) || this.board[newBoxR][newBoxC] === '#') {
                     continue;
                 }
-                if (boxPositions.has(newBoxKey)) {
-                    continue;
-                }
-                if (this.board[newBoxR][newBoxC] === '#') {
-                    continue;
-                }
+                let dRawBoxCount = 3;
+                // let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerKey)?1:0;
+                // dRawBoxCount += this.goalPositions.has(newBoxKey)?-1:0;
                 const newBoxPositions = new Set(boxPositions);
                 newBoxPositions.delete(newPlayerKey);
                 newBoxPositions.add(newBoxKey);
-                neighbors.push([[newPlayerR, newPlayerC], newBoxPositions, moveChar]);
+                neighbors.push([[newPlayerR, newPlayerC], newBoxPositions, moveChar, dRawBoxCount]);
             }
-            else {
-                neighbors.push([[newPlayerR, newPlayerC], boxPositions, moveChar]);
+            else { // Just a move, no pushes
+                neighbors.push([[newPlayerR, newPlayerC], boxPositions, moveChar.toLowerCase(), 0]);
             }
         }
         return neighbors;
@@ -129,35 +132,35 @@ export class Solver {
             playerPos: this.initialPlayerPos,
             boxPositions: this.initialBoxPositions
         };
-        queue.pushBack([initialState, [], this.initialBoxesOnGoal]);
+        queue.pushBack([initialState, [], this.initialRawBoxCount]);
         visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped)
                 break;
             nodesSearched++;
-            const [{ playerPos, boxPositions }, path, currentBoxesOnGoal] = popped;
+            const [{ playerPos, boxPositions }, path, currentRawBoxCount] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
-            if (this.isSolved(boxPositions) || currentBoxesOnGoal === this.goalCount) {
+            if (this.isSolved(boxPositions)) {
+                console.log("CurRawBoxCount:", currentRawBoxCount);
                 return { type: 'success', path: path.join(''), nodesSearched: nodesSearched };
             }
-            for (const [nextPlayer, nextBoxes, move] of this.getNeighbors(playerPos, boxPositions)) {
+            for (const [nextPlayer, nextBoxes, move, dRawBoxCount] of this.getNeighbors(playerPos, boxPositions)) {
                 const nextKey = this.getStateKey(nextPlayer, nextBoxes);
-                if (!visited.has(nextKey)) {
-                    visited.add(nextKey);
-                    let nextBoxesOnGoal = currentBoxesOnGoal;
-                    const [dr, dc] = MOVES[move];
-                    const oldBoxKey = `${nextPlayer[0]},${nextPlayer[1]}`;
-                    const newBoxKey = `${nextPlayer[0] + dr},${nextPlayer[1] + dc}`;
-                    // If the player actually pushed a box (i.e. the box moved from oldBoxKey to newBoxKey)
-                    if (boxPositions.has(oldBoxKey)) {
-                        if (this.goalPositions.has(oldBoxKey))
-                            nextBoxesOnGoal--; // Left a goal
-                        if (this.goalPositions.has(newBoxKey))
-                            nextBoxesOnGoal++; // Entered a goal
-                    }
-                    queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], 0]);
-                }
+                if (visited.has(nextKey))
+                    continue;
+                // If not yet seen this next state then add to queue
+                visited.add(nextKey);
+                let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
+                // const [dr, dc] = MOVES[move]; 
+                // const oldBoxKey = `${nextPlayer[0]},${nextPlayer[1]}`;
+                // const newBoxKey = `${nextPlayer[0] + dr},${nextPlayer[1] + dc}`;
+                // // If the player actually pushed a box (i.e. the box moved from oldBoxKey to newBoxKey)
+                // if (boxPositions.has(oldBoxKey)) {
+                //     if (this.goalPositions.has(oldBoxKey)) nextRawBoxCount++; // Left a goal
+                //     if (this.goalPositions.has(newBoxKey)) nextRawBoxCount--; // Entered a goal
+                // }
+                queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], nextRawBoxCount]);
             }
         }
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
