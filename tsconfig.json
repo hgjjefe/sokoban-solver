@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2025",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "rootDir": "src",
     "outDir": ".",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "lib": ["DOM", "DOM.Iterable", "ES2025"],
     
     "strict": false,
     "strictNullChecks": false,

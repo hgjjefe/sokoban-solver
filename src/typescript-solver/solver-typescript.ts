@@ -24,7 +24,8 @@ export function solveTypescript(
             }
             else if (type === 'PROGRESS') progressCallback(payload);
             else if (type === 'SUCCESS') { worker.terminate(); resolve(payload); }
-            else if (type === 'TIMEOUT') { worker.terminate(); resolve(["Timeout", payload]); }
+            else if (type === 'ERROR') { worker.terminate(); reject(["Error", payload]); }
+            else if (type === 'TIMEOUT') { worker.terminate(); reject(["Timeout", payload]); }
             else{
                 console.log(`Error: unknown message type "${type}" from worker`)
             }
@@ -34,7 +35,6 @@ export function solveTypescript(
             if (signal.aborted) { worker.terminate(); return reject(new DOMException("Aborted", "AbortError")); }
             signal.addEventListener('abort', () => { worker.terminate(); reject(new DOMException("Aborted", "AbortError")); });
         }
-
         worker.postMessage({ gridText, timeoutMs });
     });
 }
