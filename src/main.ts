@@ -18,6 +18,16 @@ declare global {
 // @timeoutMs: number default to 60000 ms (one minute)
 // Outputs: move sequence string, and number of nodes explored
 
+// Some Helpers
+const range = (n:number) => [...Array(n).keys()]   // python style range function
+function stripEmptyRowsCols(gridText:string[]){
+    const res = gridText.filter(row => /\S/.test(row));
+    const gridWidth = res[0].length; const rangeW = range(gridWidth);
+    const minCol = rangeW.findIndex(i =>/\S/.test( res.map(row => row[i]).join('') ) );
+    const maxCol = rangeW.findLastIndex(i =>/\S/.test( res.map(row => row[i]).join('') ) );
+    return res.map( row => row.slice(minCol, maxCol+1) );
+}
+
 interface State {
   name: string;
   width: number;
@@ -107,7 +117,7 @@ const updateGridSize = () => {
   //   cellSize: finalCellSize,
   //   gridWidth: actualGridWidth,
   //   gridHeight: actualGridHeight,
-  //   gridDimensions: `${LEVEL_DATA.w}x${LEVEL_DATA.h}`
+  //   gridDimensions: `${LEVEL_DATA.h}x${LEVEL_DATA.w}`
   // })
 }
 
@@ -145,7 +155,6 @@ const setupInitialGrid = () => {
       case 'target-block': cell.setAttribute('data-type', 'target-player'); break
       case 'target-player': cell.setAttribute('data-type', 'floor'); break
     }
-
     // Reset solver UI when grid is modified
     resetSolverUI()
   }))
@@ -551,7 +560,7 @@ const populateSolutionStates = () => {
   console.log('LEVEL_DATA.solution END', LEVEL_DATA.solution)
 }
 const gridToText = (): string[] => {
-  const textList: string[] = [];
+  const gridText: string[] = [];
   for (let y = 0; y < LEVEL_DATA.h; y++) {
     let rowText = ''; // Start as a proper string
     for (let x = 0; x < LEVEL_DATA.w; x++) {
@@ -570,9 +579,10 @@ const gridToText = (): string[] => {
         default:              rowText += ' '; break;
       }
     }
-    textList.push(rowText);
+    gridText.push(rowText);
   }
-  return textList;
+  // console.log("rowcols:",LEVEL_DATA.h, LEVEL_DATA.w)
+  return gridText;
 };
 const displayState = (state) => {
   // console.log('displayState', state)
@@ -599,7 +609,7 @@ const calculate = async () => {
   await sleep(100) // To allow button to be disabled
   const gridText = gridToText()
   const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current)
-  
+
   // DISABLE THIS TO AVOID SAVING LEVEL DATA
   // const gridWidth = gridText[0].length
   // const savedGrid = level.grid.map(l => l.padEnd(gridWidth, ' '))
@@ -698,28 +708,30 @@ const loadLevelList = async (gridSetPath = 'grids/Boxworld.txt') => {
     if (grid.length === 0) {
       grid = Array(8).fill(' '.repeat(8))
     }
+    grid = stripEmptyRowsCols(grid);
+    // console.log(`GRID ${name}:`, grid);
     return { name, solution, grid }
   })
+  // DISABLE LOCAL STORAGE
+  // if (window.localStorage.getItem('sok') === null) {
+  //   window.localStorage.setItem('sok', JSON.stringify([]))
+  // }
 
-  if (window.localStorage.getItem('sok') === null) {
-    window.localStorage.setItem('sok', JSON.stringify([]))
-  }
-
-  const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
-  savedLevels.forEach(savedLevel => {
-    const level = levels.find(l => l.name === savedLevel.name)
-    if (level === undefined) {
-      levels.push(savedLevel)
-    } else {
-      level.grid = savedLevel.grid
-      level.solution = savedLevel.solution
-    }
-  })
+  // const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
+  // savedLevels.forEach(savedLevel => {
+  //   const level = levels.find(l => l.name === savedLevel.name)
+  //   if (level === undefined) {
+  //     levels.push(savedLevel)
+  //   } else {
+  //     level.grid = savedLevel.grid
+  //     level.solution = savedLevel.solution
+  //   }
+  // })
   // Don't sort - keep the order from the .txt file
   // levels.sort((a, b) => a.name.localeCompare(b.name))
 
   LEVEL_DATA.levels = levels
-  console.log('LEVEL_DATA.levels', LEVEL_DATA.levels)
+  // console.log('LEVEL_DATA.levels', LEVEL_DATA.levels)
   const loadSelect = document.querySelector('.load-select')
   loadSelect.innerHTML = ''
   LEVEL_DATA.levels.forEach(level => {

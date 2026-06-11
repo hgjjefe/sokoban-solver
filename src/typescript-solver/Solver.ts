@@ -1,4 +1,4 @@
-import { range, stripEmptyRowsCols } from "./utils";
+// import { range } from "./utils";
 // import { Deque } from "./Deque";
 
 class Deque<T> {
@@ -35,6 +35,15 @@ class Deque<T> {
     get length(): number {
         return this.tail - this.head;
     }
+}
+// GridText formatting Helpers
+const range = (n:number) => [...Array(n).keys()] 
+function stripEmptyRowsCols(gridText:string[]){
+    const res = gridText.filter(row => /\S/.test(row));
+    const gridWidth = res[0].length; const rangeW = range(gridWidth);
+    const minCol = rangeW.findIndex(i =>/\S/.test( res.map(row => row[i]).join('') ) );
+    const maxCol = rangeW.findLastIndex(i =>/\S/.test( res.map(row => row[i]).join('') ) );
+    return res.map( row => row.slice(minCol, maxCol+1) );
 }
 
 type PosTup = [number, number];
@@ -97,6 +106,7 @@ export class Solver {
     private boxZobristTable: bigint[][] = [];
 
     constructor(board: string[]) {
+        // board = stripEmptyRowsCols(board);
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
         this.cols = this.board[0].length;
@@ -258,7 +268,6 @@ export class Solver {
             const [{ playerPos, boxPositions }, path, currentRawBoxCount, currentHash] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (  currentRawBoxCount === 0 ) {
-                console.log("CurRawBoxCount:", currentRawBoxCount)
                 return {type:'success', path: path.join(''), nodesSearched: nodesSearched};
             }
 

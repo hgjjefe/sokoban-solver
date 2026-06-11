@@ -1,6 +1,22 @@
 // @ts-nocheck
 // Using Festival-Rust solver (Festival C++ ported to Rust/WASM)
 import { solveTypescript } from "./typescript-solver/solver-typescript.js";
+// Every solverFunction must satisfy the solveFestivalRust signature above:
+// @gridText: an array of strings, each string representing a row of the level
+// @progressCallback: Should be called inside the solver to allow diplay button text, and accepts
+//  a single object that should have at least these two attributes: "explored" and "timeElapsed" 
+// @timeoutMs: number default to 60000 ms (one minute)
+// Outputs: move sequence string, and number of nodes explored
+// Some Helpers
+const range = (n) => [...Array(n).keys()]; // python style range function
+function stripEmptyRowsCols(gridText) {
+    const res = gridText.filter(row => /\S/.test(row));
+    const gridWidth = res[0].length;
+    const rangeW = range(gridWidth);
+    const minCol = rangeW.findIndex(i => /\S/.test(res.map(row => row[i]).join('')));
+    const maxCol = rangeW.findLastIndex(i => /\S/.test(res.map(row => row[i]).join('')));
+    return res.map(row => row.slice(minCol, maxCol + 1));
+}
 // ============ ACTUAL CODE STARTS HERE ==============
 const LEVEL_DATA = {
     w: 10, // Width of the sokoban level
@@ -58,7 +74,7 @@ const updateGridSize = () => {
     //   cellSize: finalCellSize,
     //   gridWidth: actualGridWidth,
     //   gridHeight: actualGridHeight,
-    //   gridDimensions: `${LEVEL_DATA.w}x${LEVEL_DATA.h}`
+    //   gridDimensions: `${LEVEL_DATA.h}x${LEVEL_DATA.w}`
     // })
 };
 const setupInitialGrid = () => {
@@ -488,7 +504,7 @@ const populateSolutionStates = () => {
     console.log('LEVEL_DATA.solution END', LEVEL_DATA.solution);
 };
 const gridToText = () => {
-    const textList = [];
+    const gridText = [];
     for (let y = 0; y < LEVEL_DATA.h; y++) {
         let rowText = ''; // Start as a proper string
         for (let x = 0; x < LEVEL_DATA.w; x++) {
@@ -525,9 +541,10 @@ const gridToText = () => {
                     break;
             }
         }
-        textList.push(rowText);
+        gridText.push(rowText);
     }
-    return textList;
+    // console.log("rowcols:",LEVEL_DATA.h, LEVEL_DATA.w)
+    return gridText;
 };
 const displayState = (state) => {
     // console.log('displayState', state)
@@ -644,26 +661,28 @@ const loadLevelList = async (gridSetPath = 'grids/Boxworld.txt') => {
         if (grid.length === 0) {
             grid = Array(8).fill(' '.repeat(8));
         }
+        grid = stripEmptyRowsCols(grid);
+        // console.log(`GRID ${name}:`, grid);
         return { name, solution, grid };
     });
-    if (window.localStorage.getItem('sok') === null) {
-        window.localStorage.setItem('sok', JSON.stringify([]));
-    }
-    const savedLevels = JSON.parse(window.localStorage.getItem('sok'));
-    savedLevels.forEach(savedLevel => {
-        const level = levels.find(l => l.name === savedLevel.name);
-        if (level === undefined) {
-            levels.push(savedLevel);
-        }
-        else {
-            level.grid = savedLevel.grid;
-            level.solution = savedLevel.solution;
-        }
-    });
+    // DISABLE LOCAL STORAGE
+    // if (window.localStorage.getItem('sok') === null) {
+    //   window.localStorage.setItem('sok', JSON.stringify([]))
+    // }
+    // const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
+    // savedLevels.forEach(savedLevel => {
+    //   const level = levels.find(l => l.name === savedLevel.name)
+    //   if (level === undefined) {
+    //     levels.push(savedLevel)
+    //   } else {
+    //     level.grid = savedLevel.grid
+    //     level.solution = savedLevel.solution
+    //   }
+    // })
     // Don't sort - keep the order from the .txt file
     // levels.sort((a, b) => a.name.localeCompare(b.name))
     LEVEL_DATA.levels = levels;
-    console.log('LEVEL_DATA.levels', LEVEL_DATA.levels);
+    // console.log('LEVEL_DATA.levels', LEVEL_DATA.levels)
     const loadSelect = document.querySelector('.load-select');
     loadSelect.innerHTML = '';
     LEVEL_DATA.levels.forEach(level => {

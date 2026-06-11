@@ -1,3 +1,4 @@
+// import { range } from "./utils";
 // import { Deque } from "./Deque";
 class Deque {
     data = []; // 👈 Use a fast native array
@@ -30,6 +31,16 @@ class Deque {
     get length() {
         return this.tail - this.head;
     }
+}
+// GridText formatting Helpers
+const range = (n) => [...Array(n).keys()];
+function stripEmptyRowsCols(gridText) {
+    const res = gridText.filter(row => /\S/.test(row));
+    const gridWidth = res[0].length;
+    const rangeW = range(gridWidth);
+    const minCol = rangeW.findIndex(i => /\S/.test(res.map(row => row[i]).join('')));
+    const maxCol = rangeW.findLastIndex(i => /\S/.test(res.map(row => row[i]).join('')));
+    return res.map(row => row.slice(minCol, maxCol + 1));
 }
 const MOVES = {
     'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
@@ -70,6 +81,7 @@ export class Solver {
     playerZobristTable = []; // For Zobrist Hashing
     boxZobristTable = [];
     constructor(board) {
+        // board = stripEmptyRowsCols(board);
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
         this.cols = this.board[0].length;
@@ -186,7 +198,7 @@ export class Solver {
                 const newBoxKey = (newBoxR << 16) | newBoxC;
                 const newBoxPos = [newBoxR, newBoxC];
                 // Box cannot be pushed to out of bounds OR another box OR a wall
-                // OR to non-pushable positions
+                //   OR to non-pushable positions
                 if (!this.isInBound(newBoxPos) || boxPositions.has(newBoxKey)
                     || this.board[newBoxR][newBoxC] === '#' || !this.pushablePositions.has(newBoxKey)) {
                     continue;
@@ -239,7 +251,6 @@ export class Solver {
             const [{ playerPos, boxPositions }, path, currentRawBoxCount, currentHash] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (currentRawBoxCount === 0) {
-                console.log("CurRawBoxCount:", currentRawBoxCount);
                 return { type: 'success', path: path.join(''), nodesSearched: nodesSearched };
             }
             for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
