@@ -36,6 +36,7 @@ class Deque<T> {
 type PosTup = [number, number];
 type PosInt = number;   // use (r << 16 | c) format for potential performance boost
 type PositionSet = Set<PosInt>;
+type StateHash = bigint;
 interface GameState {
     playerPos: PosTup;
     boxPositions: Set<PosInt>;
@@ -76,9 +77,9 @@ export class Solver {
     private goalPositions: PositionSet = new Set<PosInt>();
     private goalCount : number;
 
-    private playerZobristTable: number[][] = [];  // For Zobrist Hashing
-    private boxZobristTable: number[][] = [];
-    private initialStateHash: number = 0;
+    private playerZobristTable: bigint[][] = [];  // For Zobrist Hashing
+    private boxZobristTable: bigint[][] = [];
+    private initialStateHash: bigint = 0n;
 
     constructor(board: string[]) {
         this.board = board.map(row => row.split(''));
@@ -89,7 +90,7 @@ export class Solver {
             this.boxZobristTable[r] = [];
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
-                const key = (r << 16 | c);
+                const key = (r << 16) | c;
                 switch (cell){
                     case '#': this.wallPositions.add(key); break;
                     case '@': this.initialPlayerPos = [r, c]; break;
@@ -102,14 +103,21 @@ export class Solver {
                               this.goalPositions.add(key); break;
                 }
                 // Fill the zobrist tables with pseudorandom numbers
-                this.playerZobristTable[r][c] = Math.floor(Math.random() * 0xFFFFFFFF);
-                this.boxZobristTable[r][c] = Math.floor(Math.random() * 0xFFFFFFFF);
+                  // Generate two random 32-bit numbers and stitch them into a 64-bit BigInt
+                const upper32player = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
+                const lower32player = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
+                const random64player = (upper32player << 32n) | lower32player;
+                this.playerZobristTable[r][c] = random64player;
+                const upper32box = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
+                const lower32box = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
+                const random64box = (upper32box << 32n) | lower32box;
+                this.boxZobristTable[r][c] = random64box;
             }
         }
         this.goalCount = this.goalPositions.size;
     }
     // Call this once at the very start of solve() to get your baseline hash
-    private computeInitialHash(player: [number, number], boxes: PositionSet): number {
+    private getInitialHash(player: [number, number], boxes: PositionSet): StateHash {
         let hash = this.playerZobristTable[player[0]][player[1]];
         for (const packedPos of boxes) {
             const r = packedPos >> 16;
@@ -123,6 +131,10 @@ export class Solver {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
         return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
     }
+    private getNextHash(playerPos: PosTup, move: CasedMove){
+        // ...
+    }
+    
 
     private isSolved(boxPositions: PositionSet): boolean {
         for (const box of boxPositions) {
@@ -133,22 +145,28 @@ export class Solver {
     private isInBound(playerPos: PosTup): boolean {
         return 0 <= playerPos[0] && playerPos[0] < this.rows && 0 <=playerPos[1] && playerPos[1] < this.cols
     }
-    private getNeighbors(playerPos: PosTup, boxPositions: PositionSet): Array<[PosTup, PositionSet, CasedMove, -1|0|1]> {
-        const neighbors: Array<[PosTup, PositionSet, CasedMove, -1|0|1]> = [];
+    private getNeighbors(playerPos: PosTup, boxPositions: PositionSet, currentHash: StateHash): Array<[PosTup, PositionSet, CasedMove, -1|0|1, StateHash]> {
+        const neighbors: Array<[PosTup, PositionSet, CasedMove, -1|0|1, StateHash]> = [];
         const [r, c] = playerPos;
 
         for (const [moveChar, [dr, dc]] of Object.entries(MOVES) as [Move, [number, number]][]) {
             const newPlayerR = r + dr;  const newPlayerC = c + dc;
-            const newPlayerKey = newPlayerR << 16 | newPlayerC
+            const newPlayerKey = (newPlayerR << 16) | newPlayerC;
             const newPlayerPos = [ newPlayerR, newPlayerC ] as PosTup;
             // Move making player out of boound or hit a wall is not valid
             if (!this.isInBound(newPlayerPos) || this.board[newPlayerR][newPlayerC] === '#' ) {
                 continue;
             }
-            // Push a box
+            // ZOBRIST HASHING
+            let nextHash = currentHash;
+            // 11. Erase old player position, apply new player position
+            nextHash ^= this.playerZobristTable[r][c];                 // Remove old player
+            nextHash ^= this.playerZobristTable[newPlayerR][newPlayerC]; // Add new player
+
+            // Push a box => Outputs capital move letters
             if (boxPositions.has(newPlayerKey)) {
                 const newBoxR = newPlayerR + dr; const newBoxC = newPlayerC + dc;
-                const newBoxKey = newBoxR << 16 | newBoxC;
+                const newBoxKey = (newBoxR << 16) | newBoxC;
                 const newBoxPos: PosTup = [newBoxR, newBoxC];
                 // Box cannot be pushed to out of bounds or another box or a wall
                 if ( !this.isInBound( newBoxPos )
@@ -160,9 +178,16 @@ export class Solver {
                 const newBoxPositions: PositionSet = new Set(boxPositions);
                 newBoxPositions.delete(newPlayerKey);
                 newBoxPositions.add(newBoxKey);
-                neighbors.push([[newPlayerR, newPlayerC], newBoxPositions, moveChar, dRawBoxCount as -1|0|1]);
+                // ZOBRIST HASHING
+                // 2. Erase old box position, apply new box position
+                nextHash ^= this.boxZobristTable[newPlayerR][newPlayerC]; // Remove box from its old spot
+                nextHash ^= this.boxZobristTable[newBoxR][newBoxC];       // Add box to its new spot
+
+                neighbors.push([[newPlayerR, newPlayerC], newBoxPositions, moveChar, dRawBoxCount as -1|0|1, nextHash]);
+
+
             } else {  // Just a move, no pushes
-                neighbors.push([[newPlayerR, newPlayerC], boxPositions, moveChar.toLowerCase() as CasedMove, 0]);
+                neighbors.push([[newPlayerR, newPlayerC], boxPositions, moveChar.toLowerCase() as CasedMove, 0, nextHash]);
             }
         }
         return neighbors;
@@ -177,46 +202,36 @@ export class Solver {
             return {type:"error", message:"Error: More boxes than goals", nodesSearched: 0};
         }
 
-        const queue = new Deque<[GameState, Path, BoxCount]>();
-        const visited = new Set<string>();
+        const queue = new Deque<[GameState, Path, BoxCount, StateHash]>();
+        const visited = new Set<StateHash>();
         let nodesSearched = 0;
         const initialState: GameState = {
             playerPos: this.initialPlayerPos,
             boxPositions: this.initialBoxPositions
         };
+        const initialHash = this.getInitialHash(this.initialPlayerPos, this.initialBoxPositions);
 
-        queue.pushBack([initialState, [], this.initialRawBoxCount]);
-        visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
+        queue.pushBack([initialState, [], this.initialRawBoxCount, initialHash]);
+        visited.add(initialHash);
         // THE QUEUE LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped) break;
             nodesSearched++;
-            const [{ playerPos, boxPositions }, path, currentRawBoxCount] = popped;
+            const [{ playerPos, boxPositions }, path, currentRawBoxCount, currentHash] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (  currentRawBoxCount === 0 ) {
                 console.log("CurRawBoxCount:", currentRawBoxCount)
                 return {type:'success', path: path.join(''), nodesSearched: nodesSearched};
             }
 
-            for (const [nextPlayer, nextBoxes, move, dRawBoxCount] of this.getNeighbors(playerPos, boxPositions)) {
-                const nextKey = this.getStateKey(nextPlayer, nextBoxes);
-                if ( visited.has(nextKey) ) continue;
+            for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
+                if ( visited.has(nextHash) ) continue;
                 // If not yet seen this next state then add to queue
-                visited.add(nextKey);
-
+                visited.add(nextHash);
                 let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
-                // const [dr, dc] = MOVES[move]; 
-                // const oldBoxKey = `${nextPlayer[0]},${nextPlayer[1]}`;
-                // const newBoxKey = `${nextPlayer[0] + dr},${nextPlayer[1] + dc}`;
-                // // If the player actually pushed a box (i.e. the box moved from oldBoxKey to newBoxKey)
-                // if (boxPositions.has(oldBoxKey)) {
-                //     if (this.goalPositions.has(oldBoxKey)) nextRawBoxCount++; // Left a goal
-                //     if (this.goalPositions.has(newBoxKey)) nextRawBoxCount--; // Entered a goal
-                // }
 
-                queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], nextRawBoxCount]);
-                
+                queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], nextRawBoxCount, nextHash]);
             }
         }
 
