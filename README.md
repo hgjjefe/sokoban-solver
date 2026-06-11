@@ -9,7 +9,7 @@
 ## ✨ Features
 
 ### 🎯 Game & Solver
-- **Not-so-intelligent AI Solver** - Primitive BFS algorithm with optimized performance
+- **Not-so-intelligent AI Solver** - Primitive BFS algorithm with unoptimized performance
 - **Real-time Progress** - Watch the solver work with live progress updates
 - **Solution Playback** - Step through solutions move by move
 - ~~**Multiple Algorithms** - Choose from BFS, DFS, UCS, or A* search methods~~
