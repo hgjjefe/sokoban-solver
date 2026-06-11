@@ -1,6 +1,6 @@
 // import { Deque } from "./Deque";
 class Deque {
-    data = {};
+    data = []; // 👈 Use a fast native array
     head = 0;
     tail = 0;
     pushBack(item) {
@@ -11,9 +11,15 @@ class Deque {
         if (this.head === this.tail)
             return undefined;
         const item = this.data[this.head];
-        delete this.data[this.head]; // Avoid memory leaks
+        this.data[this.head] = null; // 👈 Safely clear memory without breaking V8 optimization!
         this.head++;
-        return item;
+        // Optional: Periodic cleanup if the array gets massively bloated
+        if (this.head > 100000) {
+            this.data = this.data.slice(this.head);
+            this.tail -= this.head;
+            this.head = 0;
+        }
+        return item ?? undefined;
     }
     get length() {
         return this.tail - this.head;
@@ -23,6 +29,11 @@ const MOVES = {
     'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
     //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
+// Some Helpers
+// Analyzer Helpers
+function getDeadlockPositions(rows, cols, wallPositions, goalPositions) {
+    return;
+}
 // ========= THE SOLVER CLASS ==========
 export class Solver {
     board;
@@ -31,6 +42,7 @@ export class Solver {
     initialPlayerPos = null; // Changed to allow null
     initialBoxPositions = new Set();
     initialRawBoxCount = 0;
+    wallPositions = new Set();
     goalPositions = new Set();
     goalCount;
     constructor(board) {
@@ -40,8 +52,11 @@ export class Solver {
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
-                const key = `${r},${c}`;
+                const key = (r << 16 | c);
                 switch (cell) {
+                    case '#':
+                        this.wallPositions.add(key);
+                        break;
                     case '@':
                         this.initialPlayerPos = [r, c];
                         break;
@@ -85,7 +100,7 @@ export class Solver {
         for (const [moveChar, [dr, dc]] of Object.entries(MOVES)) {
             const newPlayerR = r + dr;
             const newPlayerC = c + dc;
-            const newPlayerKey = `${newPlayerR},${newPlayerC}`;
+            const newPlayerKey = newPlayerR << 16 | newPlayerC;
             const newPlayerPos = [newPlayerR, newPlayerC];
             // Move making player out of boound or hit a wall is not valid
             if (!this.isInBound(newPlayerPos) || this.board[newPlayerR][newPlayerC] === '#') {
@@ -95,16 +110,15 @@ export class Solver {
             if (boxPositions.has(newPlayerKey)) {
                 const newBoxR = newPlayerR + dr;
                 const newBoxC = newPlayerC + dc;
-                const newBoxKey = `${newBoxR},${newBoxC}`;
+                const newBoxKey = newBoxR << 16 | newBoxC;
                 const newBoxPos = [newBoxR, newBoxC];
                 // Box cannot be pushed to out of bounds or another box or a wall
                 if (!this.isInBound(newBoxPos)
                     || boxPositions.has(newBoxKey) || this.board[newBoxR][newBoxC] === '#') {
                     continue;
                 }
-                let dRawBoxCount = 3;
-                // let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerKey)?1:0;
-                // dRawBoxCount += this.goalPositions.has(newBoxKey)?-1:0;
+                let dRawBoxCount = this.goalPositions.has(newPlayerKey) ? 1 : 0;
+                dRawBoxCount += this.goalPositions.has(newBoxKey) ? -1 : 0;
                 const newBoxPositions = new Set(boxPositions);
                 newBoxPositions.delete(newPlayerKey);
                 newBoxPositions.add(newBoxKey);
@@ -134,6 +148,7 @@ export class Solver {
         };
         queue.pushBack([initialState, [], this.initialRawBoxCount]);
         visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
+        // THE QUEUE LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped)
@@ -141,7 +156,7 @@ export class Solver {
             nodesSearched++;
             const [{ playerPos, boxPositions }, path, currentRawBoxCount] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
-            if (this.isSolved(boxPositions)) {
+            if (currentRawBoxCount === 0) {
                 console.log("CurRawBoxCount:", currentRawBoxCount);
                 return { type: 'success', path: path.join(''), nodesSearched: nodesSearched };
             }

@@ -2,7 +2,7 @@ import { range, stripEmptyRowsCols } from "./utils";
 // import { Deque } from "./Deque";
 
 class Deque<T> {
-    private data: Record<number, T> = {};
+    private data: (T | null)[] = []; // 👈 Use a fast native array
     private head = 0;
     private tail = 0;
 
@@ -15,9 +15,17 @@ class Deque<T> {
         if (this.head === this.tail) return undefined;
         
         const item = this.data[this.head];
-        delete this.data[this.head]; // Avoid memory leaks
+        this.data[this.head] = null; // 👈 Safely clear memory without breaking V8 optimization!
         this.head++;
-        return item;
+        
+        // Optional: Periodic cleanup if the array gets massively bloated
+        if (this.head > 100000) {
+            this.data = this.data.slice(this.head);
+            this.tail -= this.head;
+            this.head = 0;
+        }
+
+        return item ?? undefined;
     }
 
     get length(): number {
@@ -25,11 +33,12 @@ class Deque<T> {
     }
 }
 
-type Position = [number, number];
-type PositionSet = Set<string>;
+type PosTup = [number, number];
+type PosInt = number;   // use (r << 16 | c) format for potential performance boost
+type PositionSet = Set<PosInt>;
 interface GameState {
-    playerPos: Position;
-    boxPositions: Set<string>;
+    playerPos: PosTup;
+    boxPositions: Set<PosInt>;
 }
 type Path = string[]; type BoxCount = number;
 export type SolveResult = 
@@ -44,6 +53,9 @@ const MOVES: Record<Move, [number, number]> = {
           //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
 
+// Some Helpers
+
+
 // Analyzer Helpers
 function getDeadlockPositions(rows: number, cols:number, wallPositions: PositionSet, goalPositions: PositionSet){
     return;
@@ -57,21 +69,27 @@ export class Solver {
     private board: string[][];
     private rows: number;
     private cols: number;
-    private initialPlayerPos: Position | null = null; // Changed to allow null
-    private initialBoxPositions: PositionSet = new Set<string>();
+    private initialPlayerPos: PosTup | null = null; // Changed to allow null
+    private initialBoxPositions: PositionSet = new Set<PosInt>();
     private initialRawBoxCount : BoxCount = 0;
-    private wallPositions: PositionSet = new Set<string>();
-    private goalPositions: PositionSet = new Set<string>();
+    private wallPositions: PositionSet = new Set<PosInt>();
+    private goalPositions: PositionSet = new Set<PosInt>();
     private goalCount : number;
+
+    private playerZobristTable: number[][] = [];  // For Zobrist Hashing
+    private boxZobristTable: number[][] = [];
+    private initialStateHash: number = 0;
 
     constructor(board: string[]) {
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
         this.cols = this.board[0].length;
         for (let r = 0; r < this.rows; r++) {
+            this.playerZobristTable[r] = [];
+            this.boxZobristTable[r] = [];
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
-                const key = `${r},${c}`;
+                const key = (r << 16 | c);
                 switch (cell){
                     case '#': this.wallPositions.add(key); break;
                     case '@': this.initialPlayerPos = [r, c]; break;
@@ -83,33 +101,46 @@ export class Solver {
                     case '+': this.initialPlayerPos = [r, c];
                               this.goalPositions.add(key); break;
                 }
+                // Fill the zobrist tables with pseudorandom numbers
+                this.playerZobristTable[r][c] = Math.floor(Math.random() * 0xFFFFFFFF);
+                this.boxZobristTable[r][c] = Math.floor(Math.random() * 0xFFFFFFFF);
             }
         }
         this.goalCount = this.goalPositions.size;
     }
+    // Call this once at the very start of solve() to get your baseline hash
+    private computeInitialHash(player: [number, number], boxes: PositionSet): number {
+        let hash = this.playerZobristTable[player[0]][player[1]];
+        for (const packedPos of boxes) {
+            const r = packedPos >> 16;
+            const c = packedPos & 0xFFFF;
+            hash ^= this.boxZobristTable[r][c]; // XOR the box position in
+        }
+        return hash;
+    }
 
-    private getStateKey(playerPos: Position, boxPositions: PositionSet): string {
+    private getStateKey(playerPos: PosTup, boxPositions: PositionSet): string {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
         return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
     }
 
-    private isSolved(boxPositions: Set<string>): boolean {
+    private isSolved(boxPositions: PositionSet): boolean {
         for (const box of boxPositions) {
             if (!this.goalPositions.has(box)) return false;
         }
         return true;
     }
-    private isInBound(playerPos: Position): boolean {
+    private isInBound(playerPos: PosTup): boolean {
         return 0 <= playerPos[0] && playerPos[0] < this.rows && 0 <=playerPos[1] && playerPos[1] < this.cols
     }
-    private getNeighbors(playerPos: Position, boxPositions: PositionSet): Array<[Position, PositionSet, CasedMove, -1|0|1]> {
-        const neighbors: Array<[Position, PositionSet, CasedMove, -1|0|1]> = [];
+    private getNeighbors(playerPos: PosTup, boxPositions: PositionSet): Array<[PosTup, PositionSet, CasedMove, -1|0|1]> {
+        const neighbors: Array<[PosTup, PositionSet, CasedMove, -1|0|1]> = [];
         const [r, c] = playerPos;
 
         for (const [moveChar, [dr, dc]] of Object.entries(MOVES) as [Move, [number, number]][]) {
             const newPlayerR = r + dr;  const newPlayerC = c + dc;
-            const newPlayerKey = `${newPlayerR},${newPlayerC}`;
-            const newPlayerPos = [ newPlayerR, newPlayerC ] as Position;
+            const newPlayerKey = newPlayerR << 16 | newPlayerC
+            const newPlayerPos = [ newPlayerR, newPlayerC ] as PosTup;
             // Move making player out of boound or hit a wall is not valid
             if (!this.isInBound(newPlayerPos) || this.board[newPlayerR][newPlayerC] === '#' ) {
                 continue;
@@ -117,8 +148,8 @@ export class Solver {
             // Push a box
             if (boxPositions.has(newPlayerKey)) {
                 const newBoxR = newPlayerR + dr; const newBoxC = newPlayerC + dc;
-                const newBoxKey = `${newBoxR},${newBoxC}`;
-                const newBoxPos: Position = [newBoxR, newBoxC];
+                const newBoxKey = newBoxR << 16 | newBoxC;
+                const newBoxPos: PosTup = [newBoxR, newBoxC];
                 // Box cannot be pushed to out of bounds or another box or a wall
                 if ( !this.isInBound( newBoxPos )
                 || boxPositions.has(newBoxKey) || this.board[newBoxR][newBoxC] === '#' ) {
