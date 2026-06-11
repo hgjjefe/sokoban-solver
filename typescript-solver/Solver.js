@@ -21,6 +21,12 @@ class Deque {
         }
         return item ?? undefined;
     }
+    constructor(arr = undefined) {
+        if (arr === undefined)
+            return;
+        for (let item of arr)
+            this.pushBack(item);
+    }
     get length() {
         return this.tail - this.head;
     }
@@ -29,10 +35,25 @@ const MOVES = {
     'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
     //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
-// Some Helpers
-// Analyzer Helpers
-function getDeadlockPositions(rows, cols, wallPositions, goalPositions) {
-    return;
+// =========== SOME HELPERS ==============
+// Convert [r,c] into a packed PosInt
+function posInt(r, c) {
+    return (r << 16) | c;
+} // Unpack PosInt into [r,c]
+function getRC(posInt) {
+    return [posInt >> 16, posInt & 0xFFFF];
+}
+// Get packed positions orthogonally adjacent to the currentPos
+function getAdjPos(currentPos) {
+    let [r, c] = getRC(currentPos);
+    return [posInt(r - 1, c), posInt(r + 1, c), posInt(r, c - 1), posInt(r, c + 1)];
+}
+function formatPositionSet(posSet) {
+    let posTups = [];
+    for (let posInt of posSet)
+        posTups.push(getRC(posInt));
+    let posStrings = posTups.map(p => `(${p[0]},${p[1]})`).join(' ');
+    return "Positions: " + posStrings;
 }
 // ========= THE SOLVER CLASS ==========
 export class Solver {
@@ -45,9 +66,9 @@ export class Solver {
     wallPositions = new Set();
     goalPositions = new Set();
     goalCount;
+    pushablePositions = new Set();
     playerZobristTable = []; // For Zobrist Hashing
     boxZobristTable = [];
-    initialStateHash = 0n;
     constructor(board) {
         this.board = board.map(row => row.split(''));
         this.rows = this.board.length;
@@ -105,12 +126,31 @@ export class Solver {
         }
         return hash;
     }
+    // Static Analysis
+    getPushablePositions(wallPositions, goalPositions) {
+        let flooded = new Set();
+        for (let goalPos of this.goalPositions) {
+            if (flooded.has(goalPos))
+                continue;
+            let queue = new Deque([goalPos]);
+            while (queue.length) {
+                let curPos = queue.popFront();
+                let [r, c] = getRC(curPos);
+                flooded.add(curPos);
+                for (let nPos of getAdjPos(curPos)) { // FIXED
+                    let [nr, nc] = getRC(nPos);
+                    if (!flooded.has(nPos) && !this.wallPositions.has(nPos)
+                        && !this.wallPositions.has(posInt(r + 2 * (nr - r), c + 2 * (nc - c)))) {
+                        queue.pushBack(nPos);
+                    }
+                }
+            }
+        }
+        return flooded;
+    }
     getStateKey(playerPos, boxPositions) {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
         return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
-    }
-    getNextHash(playerPos, move) {
-        // ...
     }
     isSolved(boxPositions) {
         for (const box of boxPositions) {
@@ -145,9 +185,10 @@ export class Solver {
                 const newBoxC = newPlayerC + dc;
                 const newBoxKey = (newBoxR << 16) | newBoxC;
                 const newBoxPos = [newBoxR, newBoxC];
-                // Box cannot be pushed to out of bounds or another box or a wall
-                if (!this.isInBound(newBoxPos)
-                    || boxPositions.has(newBoxKey) || this.board[newBoxR][newBoxC] === '#') {
+                // Box cannot be pushed to out of bounds OR another box OR a wall
+                // OR to non-pushable positions
+                if (!this.isInBound(newBoxPos) || boxPositions.has(newBoxKey)
+                    || this.board[newBoxR][newBoxC] === '#' || !this.pushablePositions.has(newBoxKey)) {
                     continue;
                 }
                 let dRawBoxCount = this.goalPositions.has(newPlayerKey) ? 1 : 0;
@@ -176,6 +217,9 @@ export class Solver {
         else if (this.initialBoxPositions.size > this.goalPositions.size) {
             return { type: "error", message: "Error: More boxes than goals", nodesSearched: 0 };
         }
+        this.pushablePositions = this.getPushablePositions(this.wallPositions, this.goalPositions);
+        // console.log(formatPositionSet(this.pushablePositions));
+        // THE QUEUE IS THE FRONTIER OF THE EXPLORED STATE SPACE
         const queue = new Deque();
         const visited = new Set();
         let nodesSearched = 0;

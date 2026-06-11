@@ -27,7 +27,11 @@ class Deque<T> {
 
         return item ?? undefined;
     }
-
+    constructor(arr: T[]= undefined){
+        if (arr === undefined) return;
+        for (let item of arr)
+            this.pushBack(item);
+    }
     get length(): number {
         return this.tail - this.head;
     }
@@ -54,14 +58,25 @@ const MOVES: Record<Move, [number, number]> = {
           //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
 
-// Some Helpers
-
-
-// Analyzer Helpers
-function getDeadlockPositions(rows: number, cols:number, wallPositions: PositionSet, goalPositions: PositionSet){
-    return;
+// =========== SOME HELPERS ==============
+// Convert [r,c] into a packed PosInt
+function posInt(r:number,c:number): PosInt {
+    return (r << 16) | c;
+} // Unpack PosInt into [r,c]
+function getRC(posInt: PosInt){
+    return [posInt >> 16, posInt & 0xFFFF ];
 }
-
+// Get packed positions orthogonally adjacent to the currentPos
+function getAdjPos(currentPos: PosInt): PosInt[] {
+    let [r,c] = getRC(currentPos);
+    return [ posInt(r-1,c), posInt(r+1,c), posInt(r,c-1), posInt(r,c+1) ];
+}
+function formatPositionSet(posSet: PositionSet){
+    let posTups = [];
+    for (let posInt of posSet) posTups.push( getRC(posInt) );
+    let posStrings = posTups.map(p=> `(${p[0]},${p[1]})` ).join(' ')
+    return "Positions: " + posStrings;
+}
 
 
 // ========= THE SOLVER CLASS ==========
@@ -76,10 +91,10 @@ export class Solver {
     private wallPositions: PositionSet = new Set<PosInt>();
     private goalPositions: PositionSet = new Set<PosInt>();
     private goalCount : number;
+    private pushablePositions: PositionSet = new Set<PosInt>();
 
     private playerZobristTable: bigint[][] = [];  // For Zobrist Hashing
     private boxZobristTable: bigint[][] = [];
-    private initialStateHash: bigint = 0n;
 
     constructor(board: string[]) {
         this.board = board.map(row => row.split(''));
@@ -127,14 +142,32 @@ export class Solver {
         return hash;
     }
 
+    // Static Analysis
+    private getPushablePositions(wallPositions: PositionSet, goalPositions: PositionSet): PositionSet{
+        let flooded: PositionSet = new Set();
+        for (let goalPos of this.goalPositions) {
+            if (flooded.has(goalPos)) continue;
+            let queue = new Deque<PosInt>([goalPos]);
+            while (queue.length) {
+                let curPos = queue.popFront(); let [r,c] = getRC(curPos);
+                flooded.add(curPos);
+                for (let nPos of getAdjPos(curPos)) { // FIXED
+                    let [nr, nc] = getRC(nPos);
+                    if (!flooded.has(nPos) && !this.wallPositions.has(nPos)
+                     && !this.wallPositions.has( posInt(r+2*(nr-r), c+2*(nc-c)) )
+                    ) {
+                        queue.pushBack(nPos);
+                    }
+                }
+            }
+        }
+        return flooded;
+    }
+
     private getStateKey(playerPos: PosTup, boxPositions: PositionSet): string {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
         return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
     }
-    private getNextHash(playerPos: PosTup, move: CasedMove){
-        // ...
-    }
-    
 
     private isSolved(boxPositions: PositionSet): boolean {
         for (const box of boxPositions) {
@@ -168,9 +201,10 @@ export class Solver {
                 const newBoxR = newPlayerR + dr; const newBoxC = newPlayerC + dc;
                 const newBoxKey = (newBoxR << 16) | newBoxC;
                 const newBoxPos: PosTup = [newBoxR, newBoxC];
-                // Box cannot be pushed to out of bounds or another box or a wall
-                if ( !this.isInBound( newBoxPos )
-                || boxPositions.has(newBoxKey) || this.board[newBoxR][newBoxC] === '#' ) {
+                // Box cannot be pushed to out of bounds OR another box OR a wall
+                //   OR to non-pushable positions
+                if ( !this.isInBound( newBoxPos ) || boxPositions.has(newBoxKey)
+                 || this.board[newBoxR][newBoxC] === '#' || !this.pushablePositions.has(newBoxKey) ) {
                     continue;
                 }
                 let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerKey)?1:0;
@@ -201,7 +235,10 @@ export class Solver {
         } else if (this.initialBoxPositions.size > this.goalPositions.size){
             return {type:"error", message:"Error: More boxes than goals", nodesSearched: 0};
         }
+        this.pushablePositions = this.getPushablePositions(this.wallPositions, this.goalPositions);
+        // console.log(formatPositionSet(this.pushablePositions));
 
+        // THE QUEUE IS THE FRONTIER OF THE EXPLORED STATE SPACE
         const queue = new Deque<[GameState, Path, BoxCount, StateHash]>();
         const visited = new Set<StateHash>();
         let nodesSearched = 0;
@@ -227,6 +264,7 @@ export class Solver {
 
             for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
                 if ( visited.has(nextHash) ) continue;
+                
                 // If not yet seen this next state then add to queue
                 visited.add(nextHash);
                 let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
