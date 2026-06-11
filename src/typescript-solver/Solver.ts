@@ -44,6 +44,12 @@ const MOVES: Record<Move, [number, number]> = {
           //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
 
+// Analyzer Helpers
+function getDeadlockPositions(rows: number, cols:number, wallPositions: PositionSet, goalPositions: PositionSet){
+    return;
+}
+
+
 
 // ========= THE SOLVER CLASS ==========
 
@@ -54,6 +60,7 @@ export class Solver {
     private initialPlayerPos: Position | null = null; // Changed to allow null
     private initialBoxPositions: PositionSet = new Set<string>();
     private initialRawBoxCount : BoxCount = 0;
+    private wallPositions: PositionSet = new Set<string>();
     private goalPositions: PositionSet = new Set<string>();
     private goalCount : number;
 
@@ -66,6 +73,7 @@ export class Solver {
                 const cell = this.board[r][c];
                 const key = `${r},${c}`;
                 switch (cell){
+                    case '#': this.wallPositions.add(key); break;
                     case '@': this.initialPlayerPos = [r, c]; break;
                     case '$': this.initialBoxPositions.add(key); 
                               this.initialRawBoxCount++; break;
@@ -148,7 +156,7 @@ export class Solver {
 
         queue.pushBack([initialState, [], this.initialRawBoxCount]);
         visited.add(this.getStateKey(initialState.playerPos, initialState.boxPositions));
-
+        // THE QUEUE LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();
             if (!popped) break;
