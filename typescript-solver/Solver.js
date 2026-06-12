@@ -294,15 +294,15 @@ export class Solver {
     solveBFS(progressCallback) {
         // THE QUEUE IS THE FRONTIER OF THE EXPLORED STATE SPACE
         const queue = new Deque();
-        const visited = new Set();
+        const visited = new Map();
         let nodesSearched = 0;
         const initialState = {
             playerPos: this.initialPlayerPos,
             boxPositions: this.initialBoxPositions
         };
         const initialHash = this.getInitialHash(this.initialPlayerPos, this.initialBoxPositions);
-        queue.pushBack([initialState, [], this.initialRawBoxCount, initialHash]);
-        visited.add(initialHash);
+        queue.pushBack([initialState, this.initialRawBoxCount, initialHash]);
+        visited.set(initialHash, { parentHash: null, move: '' });
         // THE QUEUE LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();
@@ -311,18 +311,27 @@ export class Solver {
             nodesSearched++;
             if (nodesSearched % 1000 === 0)
                 progressCallback({ explored: nodesSearched });
-            const [{ playerPos, boxPositions }, path, currentRawBoxCount, currentHash] = popped;
+            const [{ playerPos, boxPositions }, currentRawBoxCount, currentHash] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (currentRawBoxCount === 0) {
-                return { type: 'success', path: path.join(''), nodesSearched: nodesSearched };
+                // Reconstruct the path from the visited Map
+                const finalPath = [];
+                let curr = currentHash;
+                while (curr !== null) {
+                    const step = visited.get(curr);
+                    if (step.move)
+                        finalPath.push(step.move);
+                    curr = step.parentHash;
+                }
+                return { type: 'success', path: finalPath.reverse().join(''), nodesSearched: nodesSearched };
             }
             for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
                 if (visited.has(nextHash))
                     continue;
                 // If not yet seen this next state then add to queue
-                visited.add(nextHash);
+                visited.set(nextHash, { parentHash: currentHash, move: move });
                 let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
-                queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, [...path, move], nextRawBoxCount, nextHash]);
+                queue.pushBack([{ playerPos: nextPlayer, boxPositions: nextBoxes }, nextRawBoxCount, nextHash]);
             }
         }
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
