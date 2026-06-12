@@ -1,6 +1,6 @@
 # 🎮 Sokoban Solver & Game
 
-> A modern, responsive web-based Sokoban puzzle game with an intelligent solver, level editor, and solution visualizer. Play classic push-the-box puzzles or let the AI solve them for you!
+> A modern, responsive web-based Sokoban puzzle game with an unintelligent solver, level editor, and solution visualizer. Play classic push-the-box puzzles or let the AI solve them for you!
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Try_Now-blue?style=for-the-badge)](https://dangarfield.github.io/sokoban-solver/)
 
@@ -9,10 +9,10 @@
 ## ✨ Features
 
 ### 🎯 Game & Solver
-- **Intelligent AI Solver** - Advanced A* algorithm with optimized performance
+- **Unintelligent AI Solver** - Primitive BFS algorithm with unoptimized performance
 - **Real-time Progress** - Watch the solver work with live progress updates
 - **Solution Playback** - Step through solutions move by move
-- **Multiple Algorithms** - Choose from BFS, DFS, UCS, or A* search methods
+- ~~**Multiple Algorithms** - Choose from BFS, DFS, UCS, or A* search methods~~
 
 ### 🎨 Level Editor
 - **Visual Editor** - Click cells to cycle through floor, wall, block, target, and player
@@ -22,25 +22,22 @@
 
 ### 🎮 Gameplay
 - **Smooth Controls** - Play with WASD, arrow keys, or on-screen buttons
-- **Voice Control** - Use speech recognition for hands-free play
+- ~~**Voice Control** - Use speech recognition for hands-free play~~
 - **Mobile Friendly** - Fully responsive design works on all devices
 - **Auto-progression** - Automatically advance to next level when solved
 
 ### 💾 Data Management
-- **Local Storage** - All progress saved in your browser
+- ~~**Local Storage** - All progress saved in your browser~~
 - **Level Sharing** - Generate shareable URLs for custom levels
 - **Reset Option** - Clear all data and start fresh
-- **Cached Solutions** - Previously solved puzzles load instantly
+- ~~**Cached Solutions** - Previously solved puzzles load instantly~~
 
 ## 🚀 Quick Start
-
-### Online (Recommended)
-Simply visit the [live application](https://dangarfield.github.io/sokoban-solver/) - no installation required!
 
 ### Local Development
 ```bash
 # Clone the repository
-git clone https://github.com/dangarfield/sokoban-solver.git
+git clone https://github.com/hgjjefe/sokoban-solver.git
 cd sokoban-solver
 
 # Serve locally (any web server works)
@@ -50,6 +47,8 @@ python -m http.server 8000
 # or
 php -S localhost:8000
 
+Or use VSCode live server or whatever
+
 # Open http://localhost:8000 in your browser
 ```
 
@@ -57,7 +56,7 @@ php -S localhost:8000
 
 ### Basic Controls
 - **Movement**: `WASD` keys or arrow keys
-- **Reset Level**: `Escape` or `Space`
+- **Reset Level**: `Escape` or `R`
 - **Voice Commands**: Say "up", "down", "left", "right", or "restart"
 
 ### Level Editor
