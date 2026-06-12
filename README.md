@@ -34,9 +34,6 @@
 
 ## 🚀 Quick Start
 
-### Online (Recommended)
-Simply visit the [live application](https://dangarfield.github.io/sokoban-solver/) - no installation required!
-
 ### Local Development
 ```bash
 # Clone the repository
