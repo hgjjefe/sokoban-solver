@@ -5,6 +5,7 @@ export function solveTypescript(
     gridText: string[], 
     progressCallback: (progress: { explored: number; timeElapsed: number }) => void, 
     timeoutMs: number = 60000,
+    method: string = 'bfs',
     signal?: AbortSignal
 ): Promise<[string, number]> {
     return new Promise((resolve, reject) => {
@@ -29,6 +30,6 @@ export function solveTypescript(
             if (signal.aborted) { worker.terminate(); return reject(new DOMException("Aborted", "AbortError")); }
             signal.addEventListener('abort', () => { worker.terminate(); reject(new DOMException("Aborted", "AbortError")); });
         }
-        worker.postMessage({ gridText, timeoutMs });
+        worker.postMessage({ gridText, timeoutMs, method });
     });
 }

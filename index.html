@@ -148,7 +148,7 @@
                 <div class="col-12 col-sm-6 text-center">
                     <h1 class="mb-0 fs-2 d-inline-block">
                         <span class="title-link" title="Click to refresh and clear URL parameters">Sokoban Solver</span>
-                        <a href="https://github.com/dangarfield/sokoban-solver" class="github-link" title="View source code on GitHub">
+                        <a href="https://github.com/hgjjefe/sokoban-solver" class="github-link" title="View source code on GitHub">
                             <i class="bi bi-github"></i>
                         </a>
                     </h1>
@@ -164,7 +164,14 @@
                                 <option value="Typescript" selected>Typescript</option>
                             </select>
                         </div>
-
+                        <div class="input-group input-group-sm" style="margin-top: 5px;">
+                            <label class="input-group-text bg-light text-black" for="method-select">method</label>
+                            <select class="form-select method-select" id="method-select" title="Select Solver">
+                                <option value="bfs" selected>BFS (by move)</option>
+                                <option value="bfs-push">BFS (by push) (NYI)</option>
+                                <option value="astar">A* (NYI)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

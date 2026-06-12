@@ -9,7 +9,7 @@ function initWorker() {
     return worker;
 }
 
-async function solveFestivalRust(gridText, progressCallback = null, timeoutMs = 60000) {
+async function solveFestivalRust(gridText, progressCallback = null, timeoutMs = 60000, method) {
     // Convert array to string if needed
     const levelString = Array.isArray(gridText) ? gridText.join('\n') : gridText;
     

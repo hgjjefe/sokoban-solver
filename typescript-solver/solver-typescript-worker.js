@@ -32,12 +32,12 @@ function stripEmptyRowsCols(gridText) {
 }
 // ============ THE MAIN WORKER FUNCTION =============
 self.onmessage = function (e) {
-    const { gridText, timeoutMs } = e.data;
+    const { gridText, timeoutMs, method } = e.data;
     const progressCallback = (progress) => {
         self.postMessage({ type: 'PROGRESS', payload: progress });
     };
     const startTime = Date.now();
-    const solveResult = new Solver(gridText).solve(progressCallback);
+    const solveResult = new Solver(gridText).solve(method, progressCallback);
     // printMessage("Result:", solveResult)
     if (solveResult.type === 'error') {
         self.postMessage({ type: 'ERROR', payload: solveResult.message });

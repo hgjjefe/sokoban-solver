@@ -59,6 +59,10 @@ function getAdjPos(currentPos) {
     let [r, c] = getRC(currentPos);
     return [posInt(r - 1, c), posInt(r + 1, c), posInt(r, c - 1), posInt(r, c + 1)];
 }
+function getAdjPosWithMove(currentPos) {
+    let [r, c] = getRC(currentPos);
+    return [[posInt(r - 1, c), 'U'], [posInt(r + 1, c), 'D'], [posInt(r, c - 1), 'L'], [posInt(r, c + 1), 'R']];
+}
 function formatPositionSet(posSet) {
     let posTups = [];
     for (let posInt of posSet)
@@ -80,6 +84,8 @@ export class Solver {
     pushablePositions = new Set();
     playerZobristTable = []; // For Zobrist Hashing
     boxZobristTable = [];
+    // // FLOODFILL BUFFER DURING RUNNING
+    // private floodPositions: Uint32Array;
     constructor(board) {
         // board = stripEmptyRowsCols(board);
         this.board = board.map(row => row.split(''));
@@ -138,27 +144,55 @@ export class Solver {
         }
         return hash;
     }
-    // Static Analysis
+    // Static Analysis using naive flood fill
     getPushablePositions(wallPositions, goalPositions) {
         let flooded = new Set();
+        let queue = new Deque();
         for (let goalPos of this.goalPositions) {
-            if (flooded.has(goalPos))
-                continue;
-            let queue = new Deque([goalPos]);
-            while (queue.length) {
-                let curPos = queue.popFront();
-                let [r, c] = getRC(curPos);
-                flooded.add(curPos);
-                for (let nPos of getAdjPos(curPos)) { // FIXED
-                    let [nr, nc] = getRC(nPos);
-                    if (!flooded.has(nPos) && !this.wallPositions.has(nPos)
-                        && !this.wallPositions.has(posInt(r + 2 * (nr - r), c + 2 * (nc - c)))) {
-                        queue.pushBack(nPos);
-                    }
+            flooded.add(goalPos);
+            queue.pushBack(goalPos);
+        }
+        while (queue.length) {
+            let curPos = queue.popFront();
+            let [r, c] = getRC(curPos);
+            for (let nPos of getAdjPos(curPos)) { // FIXED
+                let [nr, nc] = getRC(nPos);
+                if (!flooded.has(nPos) && !this.wallPositions.has(nPos)
+                    && !this.wallPositions.has(posInt(r + 2 * (nr - r), c + 2 * (nc - c)))) {
+                    flooded.add(nPos);
+                    queue.pushBack(nPos);
                 }
             }
         }
         return flooded;
+    }
+    // Flood fill with simple bfs
+    floodRoom(playerPos, boxPositions) {
+        let playerPosInt = posInt(playerPos[0], playerPos[1]);
+        let flooded = new Set([playerPosInt]);
+        let queue = new Deque([playerPosInt]);
+        let pushableBoxes = [];
+        while (queue.length) {
+            let curPos = queue.popFront();
+            let [r, c] = getRC(curPos);
+            for (let [nPos, move] of getAdjPosWithMove(curPos)) { // FIXED
+                let [nr, nc] = getRC(nPos);
+                if (!flooded.has(nPos) && !this.wallPositions.has(nPos) && !boxPositions.has(nPos)) {
+                    flooded.add(nPos);
+                    queue.pushBack(nPos);
+                }
+                else if (boxPositions.has(nPos)) {
+                    let landingRow = nr + (nr - r);
+                    let landingCol = nc + (nc - c);
+                    let landingPosInt = posInt(landingRow, landingCol);
+                    // 🛑 A push is only valid if the landing tile is NOT a wall and NOT another box
+                    if (!this.wallPositions.has(landingPosInt) && !boxPositions.has(landingPosInt)) {
+                        pushableBoxes.push([nPos, move]);
+                    }
+                }
+            }
+        }
+        return pushableBoxes;
     }
     getStateKey(playerPos, boxPositions) {
         const sortedBoxes = Array.from(boxPositions).sort().join(';');
@@ -220,17 +254,8 @@ export class Solver {
         }
         return neighbors;
     }
-    // Now returns string[] for a win, or a string message for an error/failure
-    solve(progressCallback) {
-        // Catch the missing player error cleanly right here
-        if (!this.initialPlayerPos) {
-            return { type: "error", message: "Error: No player found on the board", nodesSearched: 0 };
-        }
-        else if (this.initialBoxPositions.size > this.goalPositions.size) {
-            return { type: "error", message: "Error: More boxes than goals", nodesSearched: 0 };
-        }
-        this.pushablePositions = this.getPushablePositions(this.wallPositions, this.goalPositions);
-        // console.log(formatPositionSet(this.pushablePositions));
+    // BFS MAIN LOOP
+    solveBFS(progressCallback) {
         // THE QUEUE IS THE FRONTIER OF THE EXPLORED STATE SPACE
         const queue = new Deque();
         const visited = new Set();
@@ -265,5 +290,21 @@ export class Solver {
             }
         }
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
+    }
+    // SOLVE METHODS HANDLER
+    solve(method, progressCallback) {
+        // Catch the missing player error cleanly right here
+        if (!this.initialPlayerPos) {
+            return { type: "error", message: "Error: No player found on the board", nodesSearched: 0 };
+        }
+        else if (this.initialBoxPositions.size > this.goalPositions.size) {
+            return { type: "error", message: "Error: More boxes than goals", nodesSearched: 0 };
+        }
+        this.pushablePositions = this.getPushablePositions(this.wallPositions, this.goalPositions);
+        // console.log(formatPositionSet(this.pushablePositions));
+        switch (method) {
+            case 'bfs': return this.solveBFS(progressCallback);
+            default: return { type: "error", message: "Error: Invalid solve method", nodesSearched: 0 };
+        }
     }
 }

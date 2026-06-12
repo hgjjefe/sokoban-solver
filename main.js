@@ -566,6 +566,8 @@ const calculate = async () => {
     solveButton.textContent = 'Solving...';
     // NEW CODE
     const solverName = document.querySelector('.solver-select').value;
+    const solveMethod = document.querySelector('.method-select').value;
+    console.log("method", solveMethod);
     await sleep(100); // To allow button to be disabled
     const gridText = gridToText();
     const level = LEVEL_DATA.levels.find(l => l.name === LEVEL_DATA.current);
@@ -598,7 +600,7 @@ const calculate = async () => {
         };
         const startTime = performance.now();
         // SOLVER FUNCTION OPERATES HERE
-        const [solutionResult, nodesSearched] = await solverFunction(gridText, progressCallback, 60000);
+        const [solutionResult, nodesSearched] = await solverFunction(gridText, progressCallback, 60000, solveMethod);
         const endTime = performance.now();
         const timeStr = ((endTime - startTime) / 1000).toFixed(2);
         // GIVES INFO AFTER A SUCCESSFUL SOLVE

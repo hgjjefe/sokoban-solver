@@ -1,4 +1,4 @@
-export function solveTypescript(gridText, progressCallback, timeoutMs = 60000, signal) {
+export function solveTypescript(gridText, progressCallback, timeoutMs = 60000, method = 'bfs', signal) {
     return new Promise((resolve, reject) => {
         const worker = new Worker('/typescript-solver/solver-typescript-worker.js', { type: 'module' });
         worker.onmessage = (e) => {
@@ -32,6 +32,6 @@ export function solveTypescript(gridText, progressCallback, timeoutMs = 60000, s
             }
             signal.addEventListener('abort', () => { worker.terminate(); reject(new DOMException("Aborted", "AbortError")); });
         }
-        worker.postMessage({ gridText, timeoutMs });
+        worker.postMessage({ gridText, timeoutMs, method });
     });
 }
