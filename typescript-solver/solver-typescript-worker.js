@@ -37,7 +37,7 @@ self.onmessage = function (e) {
         self.postMessage({ type: 'PROGRESS', payload: progress });
     };
     const startTime = Date.now();
-    const solveResult = new Solver(gridText).solve();
+    const solveResult = new Solver(gridText).solve(progressCallback);
     // printMessage("Result:", solveResult)
     if (solveResult.type === 'error') {
         self.postMessage({ type: 'ERROR', payload: solveResult.message });

@@ -5,26 +5,21 @@ class Deque<T> {
     private data: (T | null)[] = []; // 👈 Use a fast native array
     private head = 0;
     private tail = 0;
-
     pushBack(item: T): void {
         this.data[this.tail] = item;
         this.tail++;
     }
-
     popFront(): T | undefined {
         if (this.head === this.tail) return undefined;
-        
         const item = this.data[this.head];
         this.data[this.head] = null; // 👈 Safely clear memory without breaking V8 optimization!
         this.head++;
-        
         // Optional: Periodic cleanup if the array gets massively bloated
-        if (this.head > 100000) {
-            this.data = this.data.slice(this.head);
-            this.tail -= this.head;
-            this.head = 0;
-        }
-
+        // if (this.head > 100000) {
+        //     this.data = this.data.slice(this.head);
+        //     this.tail -= this.head;
+        //     this.head = 0;
+        // }
         return item ?? undefined;
     }
     constructor(arr: T[]= undefined){
@@ -238,7 +233,7 @@ export class Solver {
     }
 
     // Now returns string[] for a win, or a string message for an error/failure
-    public solve(): SolveResult {
+    public solve(progressCallback): SolveResult {
         // Catch the missing player error cleanly right here
         if (!this.initialPlayerPos) {
             return {type:"error", message:"Error: No player found on the board", nodesSearched: 0};
@@ -265,6 +260,7 @@ export class Solver {
             const popped = queue.popFront();
             if (!popped) break;
             nodesSearched++;
+            if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
             const [{ playerPos, boxPositions }, path, currentRawBoxCount, currentHash] = popped;
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (  currentRawBoxCount === 0 ) {
