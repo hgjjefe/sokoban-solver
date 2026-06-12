@@ -37,7 +37,7 @@
 ### Local Development
 ```bash
 # Clone the repository
-git clone https://github.com/dangarfield/sokoban-solver.git
+git clone https://github.com/hgjjefe/sokoban-solver.git
 cd sokoban-solver
 
 # Serve locally (any web server works)
