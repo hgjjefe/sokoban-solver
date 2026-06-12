@@ -47,6 +47,8 @@ python -m http.server 8000
 # or
 php -S localhost:8000
 
+Or use VSCode live server or whatever
+
 # Open http://localhost:8000 in your browser
 ```
 
