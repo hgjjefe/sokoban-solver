@@ -307,7 +307,7 @@ export class Solver {
         return neighbors;
     }
     // ============ BFS on move basis (naive) ===============
-    private solveBFS(progressCallback): SolveResult{
+    private solveBFS(progressCallback, isPrintBoard=false): SolveResult{
         // THE QUEUE IS THE FRONTIER,[playerPos, boxPositions, BoxCount, StateHash]
         const queue = new Deque<[PosInt, PositionSet, BoxCount, StateHash]>();
         const visited = new Map<StateHash, {parentHash: StateHash|null, move: CasedMove|''}>();
@@ -326,6 +326,8 @@ export class Solver {
             nodesSearched++;
             if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
             const [playerPos, boxPositions, currentRawBoxCount, currentHash] = popped;
+            if (1 <=nodesSearched && nodesSearched <= 1000 && isPrintBoard)
+                console.log(`node ${nodesSearched}:\n${this.printBoard(playerPos, boxPositions)}` ); 
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (  currentRawBoxCount === 0 ) {
                 // Reconstruct the path from the visited Map
@@ -350,7 +352,7 @@ export class Solver {
         return {type:'error', message: "Error: No solution found", nodesSearched: nodesSearched};
     }
     // ============ BFS on push basis ===============
-    private solveBFSPush(progressCallback): SolveResult {
+    private solveBFSPush(progressCallback, isPrintBoard=false): SolveResult {
         const queue = new Deque<[PosInt, PositionSet, number, StateHash]>();
         const visited = new Map<StateHash, { parentHash: StateHash | null, move: string }>();
         let nodesSearched = 0;
@@ -377,6 +379,8 @@ export class Solver {
             if (nodesSearched % 1000 === 0) progressCallback({ explored: nodesSearched });
             
             const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = popped;
+            if (1 <=nodesSearched && nodesSearched <= 1000 && isPrintBoard)
+                console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}` ); 
             // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
             // This fixes the primitive indexing crash and saves thousands of redundant operations.
             const [canR, canC] = getRC(canonicalPlayerPos);
@@ -421,7 +425,7 @@ export class Solver {
                     ^ this.playerZobristTable[nextCanonicalPos[0]][nextCanonicalPos[1]];
 
                 // 🚀 OPTIMIZATION 2: Check visited early!
-                if (visited.has(nextCanonicalHash)) {
+                if (visited.has(nextCanonicalHash)|| !this.pushablePositions.has(newBoxInt)) {
                     // Roll back the shared set before skipping
                     boxPositions.delete(newBoxInt);
                     boxPositions.add(boxInt);
@@ -464,9 +468,39 @@ export class Solver {
         // console.log(formatPositionSet(this.pushablePositions));
         // METHOD SELECT
         switch (method){
-            case 'bfs': return this.solveBFS(progressCallback);
-            case 'bfs-push': return this.solveBFSPush(progressCallback);
+            case 'bfs': return this.solveBFS(progressCallback, true);
+            case 'bfs-push': return this.solveBFSPush(progressCallback, true);
             default: return {type:"error", message:"Error: Invalid solve method", nodesSearched: 0};
         }
+    }
+    // DEBUGGING HELPER
+    private printBoard(playerPos: PosInt, boxPositions: PositionSet){
+        let board = []
+        for (let r = 0; r < this.rows; r++) {
+            let row = ''
+            for (let c = 0; c < this.cols; c++) {
+
+                const key = (r << 16) | c;
+                let cell = this.board[r][c]
+                if (cell === '#'){
+                    row += '#'
+                }else if (cell === '.'  && boxPositions.has(key)){
+                    row += '*'
+                }else if (cell ==='.' && !boxPositions.has(key)){
+                    row += '.'
+                }else if (boxPositions.has(key)){
+                    row += '$'
+                }else if (cell === '.' && key === playerPos){
+                    row += '+'
+                }else if (key === playerPos){
+                    row += '@'
+                }else{
+                    row += ' '
+                }
+                 
+            }
+            board.push(row)
+        }
+        return board.join('\n')
     }
 }
