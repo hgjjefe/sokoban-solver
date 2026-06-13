@@ -75,15 +75,23 @@ function getAdjPos(currentPos: PosInt): PosInt[] {
     let [r,c] = getRC(currentPos);
     return [ posInt(r-1,c), posInt(r+1,c), posInt(r,c-1), posInt(r,c+1) ];
 }
-function getAdjPosWithMove(currentPos: PosInt): [PosInt, [number,number]][] {
+function getAdjPosWithMove(currentPos: PosInt): [PosInt, number,number][] {
     let [r,c] = getRC(currentPos);
-    return [ [posInt(r-1,c), [-1, 0]], [posInt(r+1,c),[1, 0]], [posInt(r,c-1),[0, -1]], [posInt(r,c+1),[0, 1]] ];
+    return [ [posInt(r-1,c), -1, 0], [posInt(r+1,c),1, 0], [posInt(r,c-1),0, -1], [posInt(r,c+1),0, 1] ];
 }
 function formatPositionSet(posSet: PositionSet){
     let posTups = [];
     for (let posInt of posSet) posTups.push( getRC(posInt) );
     let posStrings = posTups.map(p=> `(${p[0]},${p[1]})` ).join(' ')
     return "Positions: " + posStrings;
+}
+function vectorAdd(posInt: PosInt, dr: number, dc: number): PosInt {
+    // 1. Extract, add, and re-mask the column so it stays within 16 bits
+    const nextC = ((posInt & 0xFFFF) + dc) & 0xFFFF;
+    // 2. Extract and add the row (arithmetic right shift preserves negative signs)
+    const nextR = (posInt >> 16) + dr;
+    // 3. Re-pack them seamlessly
+    return (nextR << 16) | nextC;
 }
 
 
@@ -178,8 +186,7 @@ export class Solver {
             queue.pushBack(goalPos);
         }
             while (queue.length) {
-                let curPos = queue.popFront(); let [r,c] = getRC(curPos);
-                
+                let curPos = queue.popFront(); let [r,c] = getRC(curPos);       
                 for (let nPos of getAdjPos(curPos)) { // FIXED
                     let [nr, nc] = getRC(nPos);
                     if (!flooded.has(nPos) && !this.wallPositions.has(nPos)
@@ -192,6 +199,43 @@ export class Solver {
             }
         return flooded;
     }
+    // Dynamic 2x2 Freeze detection
+    private isValidPush(boxPos: PosInt, dr: number, dc: number, boxPositions: PositionSet){
+        const newBoxPos = vectorAdd(boxPos, dr, dc);
+        // Box cannot be pushed to another box or a wall or non-pushable positions
+        if (this.wallPositions.has(newBoxPos)|| boxPositions.has(newBoxPos)
+            || !this.pushablePositions.has(newBoxPos) ) return false;
+        // 2x2 freeze
+        // $ $  becomes  $$    OR      $$  becomes  $$
+        //  $$           $$           $ $           $$
+        const secondPos = vectorAdd(newBoxPos, dr, dc);
+        const secondPosIsBox = boxPositions.has(secondPos);
+        if (!(this.wallPositions.has(secondPos)|| secondPosIsBox)) return true;
+        const newBoxIsRaw = !this.goalPositions.has(newBoxPos);
+        // --- QUADRANT 1 CHECK ---
+        let thirdPos = vectorAdd(newBoxPos, -dc, dr);
+        let fourthPos = vectorAdd(secondPos, -dc, dr);
+        if ((this.wallPositions.has(thirdPos) || boxPositions.has(thirdPos)) &&
+            (this.wallPositions.has(fourthPos) || boxPositions.has(fourthPos))) {
+            const hasRawBox = newBoxIsRaw ||
+                          (secondPosIsBox && !this.goalPositions.has(secondPos)) ||
+                          (boxPositions.has(thirdPos) && !this.goalPositions.has(thirdPos)) ||
+                          (boxPositions.has(fourthPos) && !this.goalPositions.has(fourthPos));
+            if (hasRawBox) return false;
+        }
+        // --- QUADRANT 2 CHECK ---
+        thirdPos = vectorAdd(newBoxPos, dc, -dr);
+        fourthPos = vectorAdd(secondPos, dc, -dr);
+        if ((this.wallPositions.has(thirdPos) || boxPositions.has(thirdPos)) &&
+            (this.wallPositions.has(fourthPos) || boxPositions.has(fourthPos))) {
+            const hasRawBox = newBoxIsRaw ||
+                          (secondPosIsBox && !this.goalPositions.has(secondPos)) ||
+                          (boxPositions.has(thirdPos) && !this.goalPositions.has(thirdPos)) ||
+                          (boxPositions.has(fourthPos) && !this.goalPositions.has(fourthPos));
+            if (hasRawBox) return false;
+        }
+        return true;
+    }
     // Flood fill with simple bfs, identifying pushable box positions
     private floodRoom(playerPos: PosInt, boxPositions: PositionSet, generatePushes:boolean=true) {
         let flooded = new Set([playerPos]);
@@ -201,7 +245,7 @@ export class Solver {
         let [minR, minC] = getRC(playerPos);
         while (queue.length) {
             let curPos = queue.popFront();  if (curPos === undefined) break;
-            for (let [nPos, [dr,dc]] of getAdjPosWithMove(curPos)) { // FIXED
+            for (let [nPos, dr,dc] of getAdjPosWithMove(curPos)) { // FIXED
                 let [nr, nc] = getRC(nPos);
                 // Flood to a floor
                 if (!flooded.has(nPos) && !this.wallPositions.has(nPos)&& !boxPositions.has(nPos)) { 
@@ -268,7 +312,7 @@ export class Solver {
             const newPlayerR = r + dr;  const newPlayerC = c + dc;
             const newPlayerKey = (newPlayerR << 16) | newPlayerC;
             // Move making player out of boound or hit a wall is not valid
-            if (!this.isInBound(newPlayerKey) || this.board[newPlayerR][newPlayerC] === '#' ) {
+            if ( this.board[newPlayerR][newPlayerC] === '#' ) {
                 continue;
             }
             // ZOBRIST HASHING
@@ -283,8 +327,7 @@ export class Solver {
                 const newBoxKey = (newBoxR << 16) | newBoxC;
                 // Box cannot be pushed to out of bounds OR another box OR a wall
                 //   OR to non-pushable positions
-                if ( !this.isInBound( newBoxKey ) || boxPositions.has(newBoxKey)
-                 || this.board[newBoxR][newBoxC] === '#' || !this.pushablePositions.has(newBoxKey) ) {
+                if ( !this.isValidPush(newPlayerKey, dr, dc, boxPositions) ) {
                     continue;
                 }
                 let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerKey)?1:0;
@@ -326,7 +369,7 @@ export class Solver {
             nodesSearched++;
             if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
             const [playerPos, boxPositions, currentRawBoxCount, currentHash] = popped;
-            if (1 <=nodesSearched && nodesSearched <= 1000 && isPrintBoard)
+            if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(playerPos, boxPositions)}` ); 
             // Check if solved   // Legacy check: this.isSolved(boxPositions)
             if (  currentRawBoxCount === 0 ) {
@@ -379,7 +422,7 @@ export class Solver {
             if (nodesSearched % 1000 === 0) progressCallback({ explored: nodesSearched });
             
             const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = popped;
-            if (1 <=nodesSearched && nodesSearched <= 1000 && isPrintBoard)
+            if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}` ); 
             // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
             // This fixes the primitive indexing crash and saves thousands of redundant operations.
@@ -486,18 +529,17 @@ export class Solver {
                     row += '#'
                 }else if (cell === '.'  && boxPositions.has(key)){
                     row += '*'
-                }else if (cell ==='.' && !boxPositions.has(key)){
+                }else if (cell === '.' && key === playerPos){
+                    row += '+'
+                }else if (cell ==='.' ){
                     row += '.'
                 }else if (boxPositions.has(key)){
                     row += '$'
-                }else if (cell === '.' && key === playerPos){
-                    row += '+'
                 }else if (key === playerPos){
                     row += '@'
                 }else{
                     row += ' '
                 }
-                 
             }
             board.push(row)
         }

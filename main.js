@@ -663,8 +663,8 @@ const loadLevelList = async (gridSetPath = 'grids/Boxworld.txt') => {
         if (grid.length === 0) {
             grid = Array(8).fill(' '.repeat(8));
         }
-        grid = stripEmptyRowsCols(grid);
-        // console.log(`GRID ${name}:`, grid);
+        //grid = stripEmptyRowsCols(grid);
+        console.log(`GRID ${name}:`, grid);
         return { name, solution, grid };
     });
     // DISABLE LOCAL STORAGE
@@ -723,7 +723,7 @@ const loadLevel = async (levelName) => {
     LEVEL_DATA.current = levelName;
     LEVEL_DATA.h = level.grid.length;
     //   console.log('LEVEL_DATA.h', LEVEL_DATA.h)
-    LEVEL_DATA.w = Math.max(...level.grid.map(row => row.replace('\n', '').split('').length));
+    LEVEL_DATA.w = Math.max(...level.grid.map(row => row.length));
     //   console.log('LEVEL_DATA.w', LEVEL_DATA.w)
     setupInitialGrid();
     for (let wi = 0; wi < level.grid.length; wi++) {
