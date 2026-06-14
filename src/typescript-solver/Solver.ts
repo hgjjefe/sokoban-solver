@@ -44,6 +44,7 @@ function stripEmptyRowsCols(gridText:string[]){
 type PosTup = [number, number];
 type PosInt = number;   // use (r << 16 | c) format for potential performance boost
 type PositionSet = Set<PosInt>;
+type BoxPositions = Uint32Array;
 type StateHash = bigint;
 interface GameState {
     playerPos: PosTup;
@@ -102,7 +103,9 @@ export class Solver {
     private rows: number;
     private cols: number;
     private initialPlayerPos: PosInt | null = null; // Changed to allow null
-    private initialBoxPositions: PositionSet = new Set<PosInt>();
+    private initialBoxPositionSet: PositionSet = new Set<PosInt>();
+    private initialBoxPositions: BoxPositions // Store boxPos in array to reduce Set() overhead
+    private boxGridLookup: Uint8Array;       // For looking up if a position is a box
     private initialRawBoxCount : BoxCount = 0;
     private wallPositions: PositionSet = new Set<PosInt>();
     private goalPositions: PositionSet = new Set<PosInt>();
@@ -112,7 +115,7 @@ export class Solver {
     private playerZobristTable: bigint[][] = [];  // For Zobrist Hashing
     private boxZobristTable: bigint[][] = [];
     // // FLOODFILL BUFFER DURING RUNNING
-    // private floodPositions: Uint32Array;
+    // private floodPositions: BoxPositions;
 
     constructor(board: string[]) {
         // board = stripEmptyRowsCols(board);
@@ -128,10 +131,10 @@ export class Solver {
                 switch (cell){
                     case '#': this.wallPositions.add(key); break;
                     case '@': this.initialPlayerPos = key; break;
-                    case '$': this.initialBoxPositions.add(key); 
+                    case '$': this.initialBoxPositionSet.add(key); 
                               this.initialRawBoxCount++; break;
                     case '.': this.goalPositions.add(key); break;
-                    case '*': this.initialBoxPositions.add(key);
+                    case '*': this.initialBoxPositionSet.add(key);
                               this.goalPositions.add(key); break;
                     case '+': this.initialPlayerPos = key;
                               this.goalPositions.add(key); break;
@@ -149,9 +152,21 @@ export class Solver {
             }
         }
         this.goalCount = this.goalPositions.size;
+        this.initialBoxPositions = new Uint32Array(this.initialBoxPositionSet);
+        this.boxGridLookup = new Uint8Array(this.rows * this.cols);
+    }
+    // for boxGridLookup index
+    private lookupIndex(packedPos: PosInt): number {
+        return ((packedPos >> 16) * this.cols) + (packedPos & 0xFFFF);
+    } // Helper for boxGridLookup index
+    private boxGridLookupHas(index: number){
+        return this.boxGridLookup[index] === 1
+    }  // Another helper for accepting posInt directly
+    private boxPositionsHas(boxPos: PosInt){
+        return this.boxGridLookup[this.lookupIndex(boxPos)] === 1
     }
     // Call this once at the very start of solve() to get your baseline hash
-    private getInitialHash(playerInt: PosInt, boxes: PositionSet): StateHash {
+    private getInitialHash(playerInt: PosInt, boxes: BoxPositions): StateHash {
         let [playerR, playerC] = getRC(playerInt);
         let hash = this.playerZobristTable[playerR][playerC];
         for (const packedPos of boxes) {
@@ -200,38 +215,39 @@ export class Solver {
         return flooded;
     }
     // Dynamic 2x2 Freeze detection
-    private isValidPush(boxPos: PosInt, dr: number, dc: number, boxPositions: PositionSet){
+    private isValidPush(boxPos: PosInt, dr: number, dc: number, boxPositions: BoxPositions){
         const newBoxPos = vectorAdd(boxPos, dr, dc);
+        const newBoxIdx = this.lookupIndex(newBoxPos);
         // Box cannot be pushed to another box or a wall or non-pushable positions
-        if (this.wallPositions.has(newBoxPos)|| boxPositions.has(newBoxPos)
+        if (this.wallPositions.has(newBoxPos)|| this.boxGridLookupHas(newBoxIdx)
             || !this.pushablePositions.has(newBoxPos) ) return false;
         // 2x2 freeze
         // $ $  becomes  $$    OR      $$  becomes  $$
         //  $$           $$           $ $           $$
         const secondPos = vectorAdd(newBoxPos, dr, dc);
-        const secondPosIsBox = boxPositions.has(secondPos);
+        const secondPosIsBox = this.boxPositionsHas(secondPos);
         if (!(this.wallPositions.has(secondPos)|| secondPosIsBox)) return true;
         const newBoxIsRaw = !this.goalPositions.has(newBoxPos);
         // --- QUADRANT 1 CHECK ---
         let thirdPos = vectorAdd(newBoxPos, -dc, dr);
         let fourthPos = vectorAdd(secondPos, -dc, dr);
-        if ((this.wallPositions.has(thirdPos) || boxPositions.has(thirdPos)) &&
-            (this.wallPositions.has(fourthPos) || boxPositions.has(fourthPos))) {
+        if ((this.wallPositions.has(thirdPos) || this.boxPositionsHas(thirdPos)) &&
+            (this.wallPositions.has(fourthPos) || this.boxPositionsHas(fourthPos))) {
             const hasRawBox = newBoxIsRaw ||
                           (secondPosIsBox && !this.goalPositions.has(secondPos)) ||
-                          (boxPositions.has(thirdPos) && !this.goalPositions.has(thirdPos)) ||
-                          (boxPositions.has(fourthPos) && !this.goalPositions.has(fourthPos));
+                          (this.boxPositionsHas(thirdPos) && !this.goalPositions.has(thirdPos)) ||
+                          (this.boxPositionsHas(fourthPos) && !this.goalPositions.has(fourthPos));
             if (hasRawBox) return false;
         }
         // --- QUADRANT 2 CHECK ---
         thirdPos = vectorAdd(newBoxPos, dc, -dr);
         fourthPos = vectorAdd(secondPos, dc, -dr);
-        if ((this.wallPositions.has(thirdPos) || boxPositions.has(thirdPos)) &&
-            (this.wallPositions.has(fourthPos) || boxPositions.has(fourthPos))) {
+        if ((this.wallPositions.has(thirdPos) || this.boxPositionsHas(thirdPos)) &&
+            (this.wallPositions.has(fourthPos) || this.boxPositionsHas(fourthPos))) {
             const hasRawBox = newBoxIsRaw ||
                           (secondPosIsBox && !this.goalPositions.has(secondPos)) ||
-                          (boxPositions.has(thirdPos) && !this.goalPositions.has(thirdPos)) ||
-                          (boxPositions.has(fourthPos) && !this.goalPositions.has(fourthPos));
+                          (this.boxPositionsHas(thirdPos) && !this.goalPositions.has(thirdPos)) ||
+                          (this.boxPositionsHas(fourthPos) && !this.goalPositions.has(fourthPos));
             if (hasRawBox) return false;
         }
         return true;
@@ -248,7 +264,7 @@ export class Solver {
             for (let [nPos, dr,dc] of getAdjPosWithMove(curPos)) { // FIXED
                 let [nr, nc] = getRC(nPos);
                 // Flood to a floor
-                if (!flooded.has(nPos) && !this.wallPositions.has(nPos)&& !boxPositions.has(nPos)) { 
+                if (!flooded.has(nPos) && !this.wallPositions.has(nPos)&& !this.boxPositionsHas(nPos)) { 
                     flooded.add(nPos);
                     queue.pushBack(nPos);
                     // Compare and update canonical tile instantly (reading order: top-to-bottom, left-to-right)
@@ -257,12 +273,12 @@ export class Solver {
                         minC = nc;
                         minPlayerPos = nPos;
                     }
-                }else if (generatePushes && boxPositions.has(nPos)){ // Flood water finds a box
+                }else if (generatePushes && this.boxPositionsHas(nPos)){ // Flood water finds a box
                     let landingRow = nr + dr;
                     let landingCol = nc + dc;
                     let landingPosInt = posInt(landingRow, landingCol);
                     // A push is only valid if the landing tile is NOT a wall and NOT another box
-                    if (!this.wallPositions.has(landingPosInt) && !boxPositions.has(landingPosInt)) {
+                    if (!this.wallPositions.has(landingPosInt) && !this.boxPositionsHas(landingPosInt)) {
                         pushableBoxes.push([nPos, dr,dc]);
                     }
                 }
@@ -304,8 +320,8 @@ export class Solver {
         return { canonicalHash, transitions: res };
     }
 
-    private getNeighbors(playerPos: PosInt, boxPositions: PositionSet, currentHash: StateHash): Array<[PosInt, PositionSet, CasedMove, -1|0|1, StateHash]> {
-        const neighbors: Array<[PosInt, PositionSet, CasedMove, -1|0|1, StateHash]> = [];
+    private getNeighbors(playerPos: PosInt, boxPositions: BoxPositions, currentHash: StateHash): Array<[PosInt, BoxPositions, CasedMove, -1|0|1, StateHash]> {
+        const neighbors: Array<[PosInt, BoxPositions, CasedMove, -1|0|1, StateHash]> = [];
         const [r, c] = getRC(playerPos);
 
         for (const [moveChar, [dr, dc]] of Object.entries(MOVES) as [Move, [number, number]][]) {
@@ -322,19 +338,19 @@ export class Solver {
             nextHash ^= this.playerZobristTable[newPlayerR][newPlayerC]; // Add new player
 
             // Push a box => Outputs capital move letters
-            if (boxPositions.has(newPlayerPos)) {
+            if (this.boxPositionsHas(newPlayerPos)) {
                 const newBoxR = newPlayerR + dr; const newBoxC = newPlayerC + dc;
-                const newBoxKey = posInt(newBoxR, newBoxC);
+                const newBoxPos = posInt(newBoxR, newBoxC);
                 // Box cannot be pushed to out of bounds OR another box OR a wall
                 //   OR to non-pushable positions
                 if ( !this.isValidPush(newPlayerPos, dr, dc, boxPositions) ) {
                     continue;
                 }
                 let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerPos)?1:0;
-                dRawBoxCount += this.goalPositions.has(newBoxKey)?-1:0;
-                const newBoxPositions: PositionSet = new Set(boxPositions);
-                newBoxPositions.delete(newPlayerPos);
-                newBoxPositions.add(newBoxKey);
+                dRawBoxCount += this.goalPositions.has(newBoxPos)?-1:0;
+                const newBoxPositions: BoxPositions = new Uint32Array(boxPositions);
+                let pushedBoxIndex = newBoxPositions.indexOf(newPlayerPos);
+                newBoxPositions[pushedBoxIndex] = newBoxPos;
                 // ZOBRIST HASHING
                 // 2. Erase old box position, apply new box position
                 nextHash ^= this.boxZobristTable[newPlayerR][newPlayerC]; // Remove box from its old spot
@@ -352,7 +368,7 @@ export class Solver {
     // ============ BFS on move basis (naive) ===============
     private solveBFS(progressCallback, isPrintBoard=false): SolveResult{
         // THE QUEUE IS THE FRONTIER,[playerPos, boxPositions, BoxCount, StateHash]
-        const queue = new Deque<[PosInt, PositionSet, BoxCount, StateHash]>();
+        const queue = new Deque<[PosInt, BoxPositions, BoxCount, StateHash]>();
         const visited = new Map<StateHash, {parentHash: StateHash|null, move: CasedMove|''}>();
         let nodesSearched = 0;
         // const initialState: GameState = {
@@ -364,10 +380,9 @@ export class Solver {
         visited.set(initialHash, { parentHash: null, move: ''});
         // THE QUEUE LOOP
         while (queue.length > 0) {
-            const popped = queue.popFront();
-            if (!popped) break;
-            nodesSearched++;
-            if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
+            const popped = queue.popFront();  if (!popped) break;
+            nodesSearched++;  if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
+
             const [playerPos, boxPositions, currentRawBoxCount, currentHash] = popped;
             if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(playerPos, boxPositions)}` ); 
@@ -382,6 +397,12 @@ export class Solver {
                     curr = step.parentHash!;
                 }
                 return {type:'success', path: finalPath.reverse().join(''), nodesSearched: nodesSearched};
+            }
+
+            // --- UNPACK BOXES ONCE ---
+            this.boxGridLookup.fill(0); // Wipe the grid instantly
+            for (let i = 0; i < boxPositions.length; i++) {
+                this.boxGridLookup[this.lookupIndex(boxPositions[i])] = 1;
             }
 
             for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
@@ -504,7 +525,7 @@ export class Solver {
         // Catch the missing player error cleanly right here
         if (!this.initialPlayerPos) {
             return {type:"error", message:"Error: No player found on the board", nodesSearched: 0};
-        } else if (this.initialBoxPositions.size > this.goalPositions.size){
+        } else if (this.initialBoxPositions.length > this.goalPositions.size){
             return {type:"error", message:"Error: More boxes than goals", nodesSearched: 0};
         }
         this.pushablePositions = this.getPushablePositions(this.wallPositions, this.goalPositions);
@@ -517,8 +538,9 @@ export class Solver {
         }
     }
     // DEBUGGING HELPER
-    private printBoard(playerPos: PosInt, boxPositions: PositionSet){
+    private printBoard(playerPos: PosInt, boxPositions: BoxPositions){
         let board = []
+        let boxPositionSet = new Set(boxPositions)
         for (let r = 0; r < this.rows; r++) {
             let row = ''
             for (let c = 0; c < this.cols; c++) {
@@ -527,13 +549,13 @@ export class Solver {
                 let cell = this.board[r][c]
                 if (cell === '#'){
                     row += '#'
-                }else if (cell === '.'  && boxPositions.has(key)){
+                }else if (cell === '.'  && boxPositionSet.has(key)){
                     row += '*'
                 }else if (cell === '.' && key === playerPos){
                     row += '+'
                 }else if (cell ==='.' ){
                     row += '.'
-                }else if (boxPositions.has(key)){
+                }else if (this.boxPositionsHas(key)){
                     row += '$'
                 }else if (key === playerPos){
                     row += '@'
