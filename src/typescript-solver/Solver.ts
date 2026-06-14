@@ -277,6 +277,43 @@ export class Solver {
         }
         return true;
     }
+    // Get the walk path at the path reconstruction phase of BFS-by-push
+    private getWalkPath(startPos: PosInt, targetPos: PosInt, boxPositions: PositionSet): string{
+        if (startPos === targetPos) return '';
+        const [startR, startC] = getRC(startPos);
+        const [targetR, targetC] = getRC(targetPos);
+        const queue: Deque<[number, number, string]> = new Deque([[startR, startC, ""]]);
+        const walked = new Set<number>();
+        walked.add( posInt(startR, startC) );
+        const dirs = [
+            { dr: -1, dc:  0, char: 'u' },
+            { dr:  1, dc:  0, char: 'd' },
+            { dr:  0, dc: -1, char: 'l' },
+            { dr:  0, dc:  1, char: 'r' }
+        ];
+        while (queue.length > 0) {
+            const [r, c, path] = queue.popFront();
+            if (r === targetR && c === targetC) {
+                return path;
+            }
+            for (const d of dirs) {
+                const nr = r + d.dr;
+                const nc = c + d.dc;
+                const nextPos = posInt(nr, nc);
+                // Check walls (assuming true/1 means a wall at that index)
+                const isWall = this.wallPositions.has(nextPos);
+                const hasBox = boxPositions.has(nextPos);
+                const isVisited = walked.has( posInt(nr,nc) );
+
+                if (!isWall && !hasBox && !isVisited) {
+                    walked.add( posInt(nr,nc));
+                    queue.pushBack([nr, nc, path + d.char]);
+                }
+            }
+        }
+        throw new Error(`Player cannot reach from (${startR},${startC}) to (${targetR},${targetC})`);
+    }
+
     // Flood fill with simple bfs, identifying pushable box positions
     private floodRoom(playerPos: PosInt, boxPositions: BoxPositions, generatePushes:boolean=true) {
         this.updateBoxGridLookup(boxPositions);
@@ -452,7 +489,7 @@ export class Solver {
     // ============ BFS on push basis ===============
     private solveBFSPush(progressCallback, isPrintBoard=false): SolveResult {
         const queue = new Deque<[PosInt, BoxPositions, number, StateHash]>();
-        const visited = new Map<StateHash, { parentHash: StateHash | null, move: string }>();
+        const visited = new Map<StateHash, { parentHash: StateHash | null, move: string, boxPos: PosInt|null }>();
         let nodesSearched = 0;
 
         // 1. Compute the true canonical starting state
@@ -460,7 +497,7 @@ export class Solver {
         const initialCanonicalHash = this.getInitialHash(initialCanonicalInt, this.initialBoxPositions);
         
         queue.pushBack([initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
-        visited.set(initialCanonicalHash, { parentHash: null, move: '' });
+        visited.set(initialCanonicalHash, { parentHash: null, move: '', boxPos: null });
 
         const getPushChar = (dr: number, dc: number): string => {
             if (dr === -1) return 'U';
@@ -485,16 +522,47 @@ export class Solver {
             const [canR, canC] = getRC(canonicalPlayerPos);
             // 2. WIN CONDITION => Reconstruct the path
             if ( currentRawBoxCount === 0) {
-                const finalPath: string[] = [];
+                // Phase 1: Backtrack to collect the step chain objects
+                const pushes: { move: string; boxPos: number }[] = [];
                 let curr: StateHash | null = currentCanonicalHash;
                 while (curr !== null) {
                     const step = visited.get(curr)!;
-                    if (step.move) finalPath.push(step.move);
+                    if (step.move) pushes.push( { move: step.move, boxPos: step.boxPos } );
                     curr = step.parentHash;
+                }
+                pushes.reverse();
+                console.log("pushesResult:", pushes)
+                // Phase 2: Forward Replay from the INITIAL board state
+                const currentBoxes = new Set<number>(this.initialBoxPositions);
+                let [playerR, playerC] = getRC(this.initialPlayerPos);
+                let finalPath: string[] = []
+                const dirMap: Record<string, { dr: number; dc: number }> = {
+                    'U': { dr: -1, dc:  0 }, 'D': { dr:  1, dc:  0 },
+                    'L': { dr:  0, dc: -1 }, 'R': { dr:  0, dc:  1 }
+                };
+                let i=0
+                for (const step of pushes) {
+                    const [ dr, dc ] = MOVES[step.move];
+                    const [boxR, boxC] = getRC(step.boxPos)
+                    // Calculate the exact coordinate the player must stand on to execute the push
+                    const standAtR = boxR - dr;
+                    const standAtC = boxC - dc;
+                    // Run mini-BFS to find the lowercase walking pushes to get to that spot
+                    const walkPath = this.getWalkPath( posInt(playerR, playerC), posInt(standAtR, standAtC), currentBoxes);
+                    // Append walk paths + uppercase push
+                    finalPath.push( walkPath + step.move);
+                    // Update our box tracker: delete old index, add the new pushed index
+                    const oldBoxIdx = step.boxPos;
+                    const newBoxIdx = posInt(boxR + dr, boxC + dc);
+                    currentBoxes.delete(oldBoxIdx);
+                    currentBoxes.add(newBoxIdx);
+                    // After pushing, the player always ends up standing where the box used to be
+                    playerR = boxR;
+                    playerC = boxC;
                 }
                 return { 
                     type: 'success', 
-                    path: finalPath.reverse().join(''), 
+                    path: finalPath.join(''), 
                     nodesSearched: nodesSearched 
                 };
             }
@@ -552,7 +620,7 @@ export class Solver {
 
                 // Log parent lineage mapping
                 const moveChar = getPushChar(dr, dc);
-                visited.set(nextCanonicalHash, { parentHash: currentCanonicalHash, move: moveChar });
+                visited.set(nextCanonicalHash, { parentHash: currentCanonicalHash, move: moveChar, boxPos: boxPos });
 
                 // Calculate goal counter tracking adjustments
                 let dRawBoxCount = 0;
@@ -568,7 +636,7 @@ export class Solver {
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
     }
 
-    // ============ Astar on move basis (naive) ===============
+    // ============ Astar on move basis (naive) (NOT YET IMPLEMENTED) ===============
     private solveAstar(progressCallback, isPrintBoard=false): SolveResult{
         // THE QUEUE IS THE FRONTIER,[playerPos, boxPositions, BoxCount, StateHash]
         const queue = new Deque<[PosInt, BoxPositions, BoxCount, StateHash]>();
