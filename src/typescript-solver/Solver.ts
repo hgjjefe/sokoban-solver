@@ -124,7 +124,7 @@ export class Solver {
             this.boxZobristTable[r] = [];
             for (let c = 0; c < this.cols; c++) {
                 const cell = this.board[r][c];
-                const key = (r << 16) | c;
+                const key = posInt(r,c);
                 switch (cell){
                     case '#': this.wallPositions.add(key); break;
                     case '@': this.initialPlayerPos = key; break;
@@ -310,7 +310,7 @@ export class Solver {
 
         for (const [moveChar, [dr, dc]] of Object.entries(MOVES) as [Move, [number, number]][]) {
             const newPlayerR = r + dr;  const newPlayerC = c + dc;
-            const newPlayerKey = (newPlayerR << 16) | newPlayerC;
+            const newPlayerPos = posInt(newPlayerR, newPlayerC)
             // Move making player out of boound or hit a wall is not valid
             if ( this.board[newPlayerR][newPlayerC] === '#' ) {
                 continue;
@@ -322,29 +322,29 @@ export class Solver {
             nextHash ^= this.playerZobristTable[newPlayerR][newPlayerC]; // Add new player
 
             // Push a box => Outputs capital move letters
-            if (boxPositions.has(newPlayerKey)) {
+            if (boxPositions.has(newPlayerPos)) {
                 const newBoxR = newPlayerR + dr; const newBoxC = newPlayerC + dc;
-                const newBoxKey = (newBoxR << 16) | newBoxC;
+                const newBoxKey = posInt(newBoxR, newBoxC);
                 // Box cannot be pushed to out of bounds OR another box OR a wall
                 //   OR to non-pushable positions
-                if ( !this.isValidPush(newPlayerKey, dr, dc, boxPositions) ) {
+                if ( !this.isValidPush(newPlayerPos, dr, dc, boxPositions) ) {
                     continue;
                 }
-                let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerKey)?1:0;
+                let dRawBoxCount: -1|0|1 = this.goalPositions.has(newPlayerPos)?1:0;
                 dRawBoxCount += this.goalPositions.has(newBoxKey)?-1:0;
                 const newBoxPositions: PositionSet = new Set(boxPositions);
-                newBoxPositions.delete(newPlayerKey);
+                newBoxPositions.delete(newPlayerPos);
                 newBoxPositions.add(newBoxKey);
                 // ZOBRIST HASHING
                 // 2. Erase old box position, apply new box position
                 nextHash ^= this.boxZobristTable[newPlayerR][newPlayerC]; // Remove box from its old spot
                 nextHash ^= this.boxZobristTable[newBoxR][newBoxC];       // Add box to its new spot
 
-                neighbors.push([ newPlayerKey, newBoxPositions, moveChar, dRawBoxCount as -1|0|1, nextHash]);
+                neighbors.push([ newPlayerPos, newBoxPositions, moveChar, dRawBoxCount as -1|0|1, nextHash]);
 
 
             } else {  // Just a move, no pushes
-                neighbors.push([newPlayerKey, boxPositions, moveChar.toLowerCase() as CasedMove, 0, nextHash]);
+                neighbors.push([newPlayerPos, boxPositions, moveChar.toLowerCase() as CasedMove, 0, nextHash]);
             }
         }
         return neighbors;
@@ -523,7 +523,7 @@ export class Solver {
             let row = ''
             for (let c = 0; c < this.cols; c++) {
 
-                const key = (r << 16) | c;
+                const key = posInt(r,c);
                 let cell = this.board[r][c]
                 if (cell === '#'){
                     row += '#'
