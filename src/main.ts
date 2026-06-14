@@ -711,7 +711,7 @@ const loadLevelList = async (gridSetPath = 'grids/Boxworld.txt') => {
     }
     
     //grid = stripEmptyRowsCols(grid);
-     console.log(`GRID ${name}:`, grid);
+    // console.log(`GRID ${name}:`, grid);
     return { name, solution, grid }
   })
   // DISABLE LOCAL STORAGE
