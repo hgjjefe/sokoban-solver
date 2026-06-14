@@ -166,7 +166,7 @@ export class Solver {
         this.floodedGrid = new Uint32Array(this.rows * this.cols);
         this.floodToken = 0;
         this.floodedGrid.fill(0);  // Initialize grid cell values
-        this.pushActions = new Int32Array(this.initialBoxPositions.length*3);
+        this.pushActions = new Int32Array(this.initialBoxPositions.length*12);
     }
     // ========== boxGridLookup Helpers ==============
     // for boxGridLookup index, general the index of 1D grid
@@ -286,7 +286,7 @@ export class Solver {
         let head = 0; let tail = 0;
         this.floodQueue[tail++] = playerPos;
         this.floodedGrid[this.lookupIndex(playerPos)] = this.floodToken; // Mark visited
-        let pushableBoxes: [PosInt, number,number][] = []
+        // let pushableBoxes: [PosInt, number,number][] = []
         let minPlayerPos = playerPos;
         let [minR, minC] = getRC(playerPos);
         while (head < tail) {  // meaning floodQueue.length > 0
@@ -309,7 +309,7 @@ export class Solver {
                     let landingPosInt = posInt(landingRow, landingCol);
                     // A push is only valid if the landing tile is NOT a wall and NOT another box
                     if (!this.wallPositions.has(landingPosInt) && !this.boxPositionsHas(landingPosInt)) {
-                        pushableBoxes.push([nPos, dr,dc]);
+                        // pushableBoxes.push([nPos, dr,dc]);
                         let writeIdx = this.pushCount * 3; // Write directly into flat stride array
                         this.pushActions[writeIdx]     = nPos;
                         this.pushActions[writeIdx + 1] = dr;
@@ -321,7 +321,7 @@ export class Solver {
                 }
             }
         }    // The top left corner floor, list of [boxes, dr, dc] where dr,dc is move
-        return { playerPos: minPlayerPos, pushes: pushableBoxes};
+        return { playerPos: minPlayerPos };
     }
     // 🔥 Fixed getNextPushes engine
     // private getNextPushes(rawPlayerPos: PosInt, boxPositions: BoxPositions, currentHash: StateHash) {
@@ -487,13 +487,11 @@ export class Solver {
             if ( currentRawBoxCount === 0) {
                 const finalPath: string[] = [];
                 let curr: StateHash | null = currentCanonicalHash;
-                
                 while (curr !== null) {
                     const step = visited.get(curr)!;
                     if (step.move) finalPath.push(step.move);
                     curr = step.parentHash;
                 }
-                
                 return { 
                     type: 'success', 
                     path: finalPath.reverse().join(''), 
@@ -502,21 +500,21 @@ export class Solver {
             }
             
             // 3. EXPAND NEIGHBORS: We need pushes here, so generatePushes defaults to true
-            const { pushes } = this.floodRoom(canonicalPlayerPos, boxPositions);
+            this.floodRoom(canonicalPlayerPos, boxPositions);
             const currentNodesPushCount = this.pushCount;
             // For each push in pushes
             for (let i=0;i< currentNodesPushCount;i++) {
-                const [boxPos, dr, dc] = pushes[i];
+                let readIdx = i * 3;
+                let boxPos = this.pushActions[readIdx];
+                let dr = this.pushActions[readIdx + 1];
+                let dc = this.pushActions[readIdx + 2];
                 if (!this.isValidPush(boxPos, dr, dc, boxPositions)){
                     continue;
                 }
-                // let readIdx = i * 3;
-                // let boxPos = this.pushActions[readIdx];
-                // let dr = this.pushActions[readIdx + 1];
-                // let dc = this.pushActions[readIdx + 2];
                 // if (boxPos !== boxPos0){
                 //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
                 //     console.log(`NOOO!! ${boxPos0}, ${boxPos}`)
+                //     throw new Error()
                 // }if (dr !== dr0){
                 //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
                 //     console.log(`NOOO!! ${dr0}, ${dr}`)
