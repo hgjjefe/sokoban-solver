@@ -99,7 +99,7 @@ export class Solver {
     floodQueue;
     floodedGrid; // A fixed size array for storing each pos is flooded or not
     floodToken; // The current number indicating flood, can be 1,2,...,
-    pushActions;
+    pushActions; // Every three elements are (boxPos, dr,dc), for storing nextPushes in floodRoom
     pushCount = 0;
     canonicalPlayerPos = 0;
     constructor(board) {
@@ -157,7 +157,7 @@ export class Solver {
         this.floodedGrid = new Uint32Array(this.rows * this.cols);
         this.floodToken = 0;
         this.floodedGrid.fill(0); // Initialize grid cell values
-        this.pushActions = new Int32Array(this.initialBoxPositions.length);
+        this.pushActions = new Int32Array(this.initialBoxPositions.length * 3);
     }
     // ========== boxGridLookup Helpers ==============
     // for boxGridLookup index, general the index of 1D grid
@@ -276,6 +276,7 @@ export class Solver {
     floodRoom(playerPos, boxPositions, generatePushes = true) {
         this.updateBoxGridLookup(boxPositions);
         this.floodToken++; //Use a new floodToken, logically turning previous flooded tiles into unflooded
+        this.pushCount = 0; // Reset pushCount
         // Initial reusable queue
         let head = 0;
         let tail = 0;
@@ -309,6 +310,13 @@ export class Solver {
                     // A push is only valid if the landing tile is NOT a wall and NOT another box
                     if (!this.wallPositions.has(landingPosInt) && !this.boxPositionsHas(landingPosInt)) {
                         pushableBoxes.push([nPos, dr, dc]);
+                        let writeIdx = this.pushCount * 3; // Write directly into flat stride array
+                        this.pushActions[writeIdx] = nPos;
+                        this.pushActions[writeIdx + 1] = dr;
+                        this.pushActions[writeIdx + 2] = dc;
+                        this.pushCount++;
+                        //console.log("nPos,dr,dc:", nPos, dr,dc)
+                        //console.log("pushActions:", this.pushActions);
                     }
                 }
             }
@@ -316,38 +324,38 @@ export class Solver {
         return { playerPos: minPlayerPos, pushes: pushableBoxes };
     }
     // 🔥 Fixed getNextPushes engine
-    getNextPushes(rawPlayerPos, boxPositions, currentHash) {
-        const res = [];
-        // 1. Analyze the current room from our raw entry point
-        const { playerPos: canonPlayerPos, pushes } = this.floodRoom(rawPlayerPos, boxPositions);
-        // 2. Compute the canonical hash for this room state
-        let [rawR, rawC] = getRC(rawPlayerPos);
-        let [canR, canC] = getRC(canonPlayerPos);
-        // Swap raw player position hash out, and put the standardized canonical hash in
-        let canonicalHash = currentHash
-            ^ this.playerZobristTable[rawR][rawC]
-            ^ this.playerZobristTable[canR][canC];
-        // 2. Pre-calculate the base box-only hash snapshot for this room
-        let baseBoxHash = currentHash ^ this.playerZobristTable[rawR][rawC];
-        // 3. Generate child transitions
-        for (const [boxInt, dr, dc] of pushes) {
-            let [boxR, boxC] = getRC(boxInt);
-            let [newBoxR, newBoxC] = [boxR + dr, boxC + dc];
-            // Create the next state's immutable box arrangement
-            const newBoxPositions = new Uint32Array(boxPositions);
-            let pushedBoxIndex = newBoxPositions.indexOf(boxInt);
-            newBoxPositions[pushedBoxIndex] = posInt(newBoxR, newBoxC);
-            // Incrementally update Zobrist hash for this specific push event
-            let nextHash = baseBoxHash
-                ^ this.boxZobristTable[boxR][boxC] // Remove box from old spot
-                ^ this.boxZobristTable[newBoxR][newBoxC] // Place box in new spot
-                ^ this.playerZobristTable[boxR][boxC]; // Place player rawly where the box used to stand
-            // Pass the raw player landing coordinate down to the child state
-            // Inside the for-loop of getNextPushes, update your res.push to pass direction and old box position:
-            res.push([boxInt, newBoxPositions, nextHash, [dr, dc]]);
-        }
-        return { canonicalHash, transitions: res };
-    }
+    // private getNextPushes(rawPlayerPos: PosInt, boxPositions: BoxPositions, currentHash: StateHash) {
+    //     const res: [PosInt, BoxPositions, StateHash, [number, number] ][] = [];
+    //     // 1. Analyze the current room from our raw entry point
+    //     const { playerPos: canonPlayerPos, pushes } = this.floodRoom(rawPlayerPos, boxPositions); 
+    //     // 2. Compute the canonical hash for this room state
+    //     let [rawR, rawC] = getRC(rawPlayerPos);
+    //     let [canR, canC] = getRC(canonPlayerPos);
+    //     // Swap raw player position hash out, and put the standardized canonical hash in
+    //     let canonicalHash = currentHash 
+    //         ^ this.playerZobristTable[rawR][rawC] 
+    //         ^ this.playerZobristTable[canR][canC];
+    //     // 2. Pre-calculate the base box-only hash snapshot for this room
+    //     let baseBoxHash = currentHash ^ this.playerZobristTable[rawR][rawC];
+    //     // 3. Generate child transitions
+    //     for (const [boxInt, dr, dc] of pushes) {
+    //         let [boxR, boxC] = getRC(boxInt);
+    //         let [newBoxR, newBoxC] = [boxR + dr, boxC + dc];
+    //         // Create the next state's immutable box arrangement
+    //         const newBoxPositions: BoxPositions = new Uint32Array(boxPositions);
+    //         let pushedBoxIndex = newBoxPositions.indexOf(boxInt);
+    //         newBoxPositions[pushedBoxIndex] = posInt(newBoxR, newBoxC);
+    //         // Incrementally update Zobrist hash for this specific push event
+    //         let nextHash = baseBoxHash
+    //             ^ this.boxZobristTable[boxR][boxC]       // Remove box from old spot
+    //             ^ this.boxZobristTable[newBoxR][newBoxC] // Place box in new spot
+    //             ^ this.playerZobristTable[boxR][boxC];   // Place player rawly where the box used to stand
+    //         // Pass the raw player landing coordinate down to the child state
+    //         // Inside the for-loop of getNextPushes, update your res.push to pass direction and old box position:
+    //         res.push([boxInt, newBoxPositions, nextHash, [dr, dc] ]);
+    //     }
+    //     return { canonicalHash, transitions: res };
+    // }
     getNeighbors(playerPos, boxPositions, currentHash) {
         const neighbors = [];
         const [r, c] = getRC(playerPos);
@@ -495,15 +503,35 @@ export class Solver {
             }
             // 3. EXPAND NEIGHBORS: We need pushes here, so generatePushes defaults to true
             const { pushes } = this.floodRoom(canonicalPlayerPos, boxPositions);
-            for (const [boxInt, dr, dc] of pushes) {
-                let [boxR, boxC] = getRC(boxInt);
+            const currentNodesPushCount = this.pushCount;
+            // For each push in pushes
+            for (let i = 0; i < currentNodesPushCount; i++) {
+                const [boxPos, dr, dc] = pushes[i];
+                if (!this.isValidPush(boxPos, dr, dc, boxPositions)) {
+                    continue;
+                }
+                // let readIdx = i * 3;
+                // let boxPos = this.pushActions[readIdx];
+                // let dr = this.pushActions[readIdx + 1];
+                // let dc = this.pushActions[readIdx + 2];
+                // if (boxPos !== boxPos0){
+                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
+                //     console.log(`NOOO!! ${boxPos0}, ${boxPos}`)
+                // }if (dr !== dr0){
+                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
+                //     console.log(`NOOO!! ${dr0}, ${dr}`)
+                // }if (dc !== dc0){
+                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
+                //     console.log(`NOOO!! ${dc0}, ${dc}`)
+                // }
+                let [boxR, boxC] = getRC(boxPos);
                 let [newBoxR, newBoxC] = [boxR + dr, boxC + dc];
-                const newBoxInt = posInt(newBoxR, newBoxC);
+                const newBoxPos = posInt(newBoxR, newBoxC);
                 const newBoxPositions = new Uint32Array(boxPositions);
-                let pushedBoxIndex = newBoxPositions.indexOf(boxInt);
-                newBoxPositions[pushedBoxIndex] = newBoxInt;
+                let pushedBoxIndex = newBoxPositions.indexOf(boxPos);
+                newBoxPositions[pushedBoxIndex] = newBoxPos;
                 // Run the flood fill directly on the shared set
-                const { playerPos: nextCanonicalInt } = this.floodRoom(boxInt, newBoxPositions, false);
+                const { playerPos: nextCanonicalInt } = this.floodRoom(boxPos, newBoxPositions, false);
                 const nextCanonicalPos = getRC(nextCanonicalInt);
                 // Calculate the Zobrist hash 
                 let nextCanonicalHash = currentCanonicalHash
@@ -512,9 +540,9 @@ export class Solver {
                     ^ this.playerZobristTable[canR][canC]
                     ^ this.playerZobristTable[nextCanonicalPos[0]][nextCanonicalPos[1]];
                 // 🚀 OPTIMIZATION 2: Check visited early!
-                if (visited.has(nextCanonicalHash) || !this.pushablePositions.has(newBoxInt)) {
+                if (visited.has(nextCanonicalHash)) {
                     // Roll back the shared set before skipping
-                    // boxPositions.delete(newBoxInt);
+                    // boxPositions.delete(newBoxPos);
                     // boxPositions.add(boxInt);
                     continue;
                 }
@@ -523,9 +551,9 @@ export class Solver {
                 visited.set(nextCanonicalHash, { parentHash: currentCanonicalHash, move: moveChar });
                 // Calculate goal counter tracking adjustments
                 let dRawBoxCount = 0;
-                if (this.goalPositions.has(boxInt))
+                if (this.goalPositions.has(boxPos))
                     dRawBoxCount++;
-                if (this.goalPositions.has(newBoxInt))
+                if (this.goalPositions.has(newBoxPos))
                     dRawBoxCount--;
                 let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
                 // Push clean state to the frontier
