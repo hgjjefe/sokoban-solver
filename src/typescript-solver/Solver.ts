@@ -116,6 +116,12 @@ export class Solver {
     private boxZobristTable: bigint[][] = [];
     // // FLOODFILL BUFFER DURING RUNNING
     // private floodPositions: BoxPositions;
+    private floodQueue: Uint32Array;
+    private floodedGrid: Uint32Array; // A fixed size array for storing each pos is flooded or not
+    private floodToken: number;  // The current number indicating flood, can be 1,2,...,
+    private pushActions; 
+    private pushCount = 0;
+    private canonicalPlayerPos: PosInt = 0;
 
     constructor(board: string[]) {
         // board = stripEmptyRowsCols(board);
@@ -155,9 +161,15 @@ export class Solver {
         this.initialBoxPositions = new Uint32Array(this.initialBoxPositionSet);
         this.boxGridLookup = new Uint8Array(this.rows * this.cols);
         this.updateBoxGridLookup(this.initialBoxPositions);
+        // Initialize flood queue for storing flooded tiles during by-push solving
+        this.floodQueue = new Uint32Array(this.rows * this.cols);
+        this.floodedGrid = new Uint32Array(this.rows * this.cols);
+        this.floodToken = 0;
+        this.floodedGrid.fill(0);  // Initialize grid cell values
+        this.pushActions = new Int32Array(this.initialBoxPositions.length);
     }
     // ========== boxGridLookup Helpers ==============
-    // for boxGridLookup index
+    // for boxGridLookup index, general the index of 1D grid
     private lookupIndex(packedPos: PosInt): number {
         return ((packedPos >> 16) * this.cols) + (packedPos & 0xFFFF);
     } // Helper for boxGridLookup index
@@ -268,19 +280,22 @@ export class Solver {
     // Flood fill with simple bfs, identifying pushable box positions
     private floodRoom(playerPos: PosInt, boxPositions: BoxPositions, generatePushes:boolean=true) {
         this.updateBoxGridLookup(boxPositions);
-        let flooded = new Set([playerPos]);
-        let queue = new Deque<PosInt>([playerPos]);
+        this.floodToken++;  //Use a new floodToken, logically turning previous flooded tiles into unflooded
+        // Initial reusable queue
+        let head = 0; let tail = 0;
+        this.floodQueue[tail++] = playerPos;
+        this.floodedGrid[this.lookupIndex(playerPos)] = this.floodToken; // Mark visited
         let pushableBoxes: [PosInt, number,number][] = []
         let minPlayerPos = playerPos;
         let [minR, minC] = getRC(playerPos);
-        while (queue.length) {
-            let curPos = queue.popFront();  if (curPos === undefined) break;
+        while (head < tail) {  // meaning floodQueue.length > 0
+            let curPos = this.floodQueue[head++];  if (curPos === undefined) break;
             for (let [nPos, dr,dc] of getAdjPosWithMove(curPos)) { 
-                let [nr, nc] = getRC(nPos);
+                let [nr, nc] = getRC(nPos); let nIdx = this.lookupIndex(nPos);
                 // Flood to a floor
-                if (!flooded.has(nPos) && !this.wallPositions.has(nPos)&& !this.boxPositionsHas(nPos)) { 
-                    flooded.add(nPos);
-                    queue.pushBack(nPos);
+                if (this.floodedGrid[nIdx] !== this.floodToken && !this.wallPositions.has(nPos)&& !this.boxPositionsHas(nPos)) { 
+                    this.floodedGrid[nIdx] = this.floodToken;  // Mark flooded
+                    this.floodQueue[tail++] = nPos;      // floodQueue.pushBack(nPos)
                     // Compare and update canonical tile instantly (reading order: top-to-bottom, left-to-right)
                     if (nr < minR || (nr === minR && nc < minC)) {
                         minR = nr;
@@ -446,7 +461,6 @@ export class Solver {
             if (dc === 1) return 'R';
             return '';
         };
-        console.log("init playPos:", getRC(initialCanonicalInt))
 
         // THE MAIN SOLVER LOOP
         while (queue.length > 0) {
@@ -455,14 +469,14 @@ export class Solver {
             if (nodesSearched % 1000 === 0) progressCallback({ explored: nodesSearched });
             
             const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = popped;
-             if(nodesSearched===8) console.log(`playPos at node ${nodesSearched}:`, getRC(canonicalPlayerPos))
+             // if(nodesSearched===8) console.log(`playPos at node ${nodesSearched}:`, getRC(canonicalPlayerPos))
             if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}` ); 
             // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
             // This fixes the primitive indexing crash and saves thousands of redundant operations.
             const [canR, canC] = getRC(canonicalPlayerPos);
             // 2. WIN CONDITION => Reconstruct the path
-            if (this.isSolved(boxPositions)) {
+            if ( currentRawBoxCount === 0) {
                 const finalPath: string[] = [];
                 let curr: StateHash | null = currentCanonicalHash;
                 
@@ -526,6 +540,54 @@ export class Solver {
         }
 
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
+    }
+
+    // ============ Astar on move basis (naive) ===============
+    private solveAstar(progressCallback, isPrintBoard=false): SolveResult{
+        // THE QUEUE IS THE FRONTIER,[playerPos, boxPositions, BoxCount, StateHash]
+        const queue = new Deque<[PosInt, BoxPositions, BoxCount, StateHash]>();
+        const visited = new Map<StateHash, {parentHash: StateHash|null, move: CasedMove|''}>();
+        let nodesSearched = 0;
+        // const initialState: GameState = {
+        //     playerPos: this.initialPlayerPos,
+        //     boxPositions: this.initialBoxPositions
+        // };
+        const initialHash = this.getInitialHash(this.initialPlayerPos, this.initialBoxPositions);
+        queue.pushBack([this.initialPlayerPos, this.initialBoxPositions, this.initialRawBoxCount, initialHash]);
+        visited.set(initialHash, { parentHash: null, move: ''});
+        // THE QUEUE LOOP
+        while (queue.length > 0) {
+            const popped = queue.popFront();  if (!popped) break;
+            nodesSearched++;  if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
+
+            const [playerPos, boxPositions, currentRawBoxCount, currentHash] = popped;
+            if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
+                console.log(`node ${nodesSearched}:\n${this.printBoard(playerPos, boxPositions)}` ); 
+            // Check if solved   // Legacy check: this.isSolved(boxPositions)
+            if (  currentRawBoxCount === 0 ) {
+                // Reconstruct the path from the visited Map
+                const finalPath: string[] = [];
+                let curr = currentHash;
+                while (curr !== null) {
+                    const step = visited.get(curr)!;
+                    if (step.move) finalPath.push(step.move);
+                    curr = step.parentHash!;
+                }
+                return {type:'success', path: finalPath.reverse().join(''), nodesSearched: nodesSearched};
+            }
+
+            // --- UNPACK BOXES ONCE ---
+            this.updateBoxGridLookup(boxPositions);
+
+            for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
+                if ( visited.has(nextHash) ) continue;
+                // If not yet seen this next state then add to queue
+                visited.set(nextHash, { parentHash: currentHash, move: move });
+                let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
+                queue.pushBack([nextPlayer, nextBoxes, nextRawBoxCount, nextHash]);
+            }
+        }
+        return {type:'error', message: "Error: No solution found", nodesSearched: nodesSearched};
     }
     // =========== SOLVE METHODS HANDLER =============
     public solve(method:string, progressCallback): SolveResult {
