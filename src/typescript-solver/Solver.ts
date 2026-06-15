@@ -62,6 +62,13 @@ const MOVES: Record<Move, [number, number]> = {
             'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
           //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
 };
+const getPushChar = (dr: number, dc: number): string => {
+            if (dr === -1) return 'U';
+            if (dr === 1) return 'D';
+            if (dc === -1) return 'L';
+            if (dc === 1) return 'R';
+            return '';
+        };
 
 // =========== SOME HELPERS ==============
 // Convert [r,c] into a packed PosInt
@@ -212,6 +219,12 @@ export class Solver {
         let [playerR, playerC] = getRC(playerPos);
         return 0 <= playerR && playerR < this.rows && 0 <= playerC && playerC < this.cols
     }
+    private updateRawBoxCount(currentRawBoxCount: number, boxPos: PosInt, newBoxPos: PosInt){
+        let dRawBoxCount = 0;
+        if (this.goalPositions.has(boxPos)) dRawBoxCount++;    
+        if (this.goalPositions.has(newBoxPos)) dRawBoxCount--; 
+        return currentRawBoxCount + dRawBoxCount;
+    }
 
     // Static Analysis using naive flood fill, called at start of solve()
     private getPushablePositions(wallPositions: PositionSet, goalPositions: PositionSet): PositionSet{
@@ -312,6 +325,46 @@ export class Solver {
             }
         }
         throw new Error(`Player cannot reach from (${startR},${startC}) to (${targetR},${targetC})`);
+    }
+    // For path reconstruction
+    private reconstructPath(visited: Map<StateHash, any>, currentCanonicalHash: StateHash): string{
+        // Phase 1: Backtrack to collect the step chain objects
+        const pushes: { move: string; boxPos: number }[] = [];
+        let curr: StateHash | null = currentCanonicalHash;
+        while (curr !== null) {
+            const step = visited.get(curr)!;
+            if (step.move) pushes.push( { move: step.move, boxPos: step.boxPos } );
+            curr = step.parentHash;
+        }
+        pushes.reverse();
+        // Phase 2: Forward Replay from the INITIAL board state
+        const currentBoxes = new Set<number>(this.initialBoxPositions);
+        let [playerR, playerC] = getRC(this.initialPlayerPos);
+        let finalPath: string[] = []
+        const dirMap: Record<string, { dr: number; dc: number }> = {
+            'U': { dr: -1, dc:  0 }, 'D': { dr:  1, dc:  0 },
+            'L': { dr:  0, dc: -1 }, 'R': { dr:  0, dc:  1 }
+        };
+        for (const step of pushes) {
+            const [ dr, dc ] = MOVES[step.move];
+            const [boxR, boxC] = getRC(step.boxPos)
+            // Calculate the exact coordinate the player must stand on to execute the push
+            const standAtR = boxR - dr;
+            const standAtC = boxC - dc;
+            // Run mini-BFS to find the lowercase walking pushes to get to that spot
+            const walkPath = this.getWalkPath( posInt(playerR, playerC), posInt(standAtR, standAtC), currentBoxes);
+            // Append walk paths + uppercase push
+            finalPath.push( walkPath + step.move);
+            // Update our box tracker: delete old index, add the new pushed index
+            const oldBoxIdx = step.boxPos;
+            const newBoxIdx = posInt(boxR + dr, boxC + dc);
+            currentBoxes.delete(oldBoxIdx);
+            currentBoxes.add(newBoxIdx);
+            // After pushing, the player always ends up standing where the box used to be
+            playerR = boxR;
+            playerC = boxC;
+        }
+        return finalPath.join('');
     }
 
     // Flood fill with simple bfs, identifying pushable box positions
@@ -491,7 +544,6 @@ export class Solver {
         const queue = new Deque<[PosInt, BoxPositions, number, StateHash]>();
         const visited = new Map<StateHash, { parentHash: StateHash | null, move: string, boxPos: PosInt|null }>();
         let nodesSearched = 0;
-
         // 1. Compute the true canonical starting state
         const { playerPos: initialCanonicalInt } = this.floodRoom(this.initialPlayerPos, this.initialBoxPositions, false);
         const initialCanonicalHash = this.getInitialHash(initialCanonicalInt, this.initialBoxPositions);
@@ -499,14 +551,7 @@ export class Solver {
         queue.pushBack([initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
         visited.set(initialCanonicalHash, { parentHash: null, move: '', boxPos: null });
 
-        const getPushChar = (dr: number, dc: number): string => {
-            if (dr === -1) return 'U';
-            if (dr === 1) return 'D';
-            if (dc === -1) return 'L';
-            if (dc === 1) return 'R';
-            return '';
-        };
-
+        
         // THE MAIN SOLVER LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();   if (!popped) break;
@@ -517,59 +562,18 @@ export class Solver {
              // if(nodesSearched===8) console.log(`playPos at node ${nodesSearched}:`, getRC(canonicalPlayerPos))
             if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}` ); 
-            // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
-            // This fixes the primitive indexing crash and saves thousands of redundant operations.
-            const [canR, canC] = getRC(canonicalPlayerPos);
             // 2. WIN CONDITION => Reconstruct the path
             if ( currentRawBoxCount === 0) {
-                // Phase 1: Backtrack to collect the step chain objects
-                const pushes: { move: string; boxPos: number }[] = [];
-                let curr: StateHash | null = currentCanonicalHash;
-                while (curr !== null) {
-                    const step = visited.get(curr)!;
-                    if (step.move) pushes.push( { move: step.move, boxPos: step.boxPos } );
-                    curr = step.parentHash;
-                }
-                pushes.reverse();
-                console.log("pushesResult:", pushes)
-                // Phase 2: Forward Replay from the INITIAL board state
-                const currentBoxes = new Set<number>(this.initialBoxPositions);
-                let [playerR, playerC] = getRC(this.initialPlayerPos);
-                let finalPath: string[] = []
-                const dirMap: Record<string, { dr: number; dc: number }> = {
-                    'U': { dr: -1, dc:  0 }, 'D': { dr:  1, dc:  0 },
-                    'L': { dr:  0, dc: -1 }, 'R': { dr:  0, dc:  1 }
-                };
-                let i=0
-                for (const step of pushes) {
-                    const [ dr, dc ] = MOVES[step.move];
-                    const [boxR, boxC] = getRC(step.boxPos)
-                    // Calculate the exact coordinate the player must stand on to execute the push
-                    const standAtR = boxR - dr;
-                    const standAtC = boxC - dc;
-                    // Run mini-BFS to find the lowercase walking pushes to get to that spot
-                    const walkPath = this.getWalkPath( posInt(playerR, playerC), posInt(standAtR, standAtC), currentBoxes);
-                    // Append walk paths + uppercase push
-                    finalPath.push( walkPath + step.move);
-                    // Update our box tracker: delete old index, add the new pushed index
-                    const oldBoxIdx = step.boxPos;
-                    const newBoxIdx = posInt(boxR + dr, boxC + dc);
-                    currentBoxes.delete(oldBoxIdx);
-                    currentBoxes.add(newBoxIdx);
-                    // After pushing, the player always ends up standing where the box used to be
-                    playerR = boxR;
-                    playerC = boxC;
-                }
-                return { 
-                    type: 'success', 
-                    path: finalPath.join(''), 
-                    nodesSearched: nodesSearched 
-                };
+                let finalPath = this.reconstructPath(visited, currentCanonicalHash);
+                return { type: 'success', path: finalPath, nodesSearched: nodesSearched };
             }
             
             // 3. EXPAND NEIGHBORS: We need pushes here, so generatePushes defaults to true
             this.floodRoom(canonicalPlayerPos, boxPositions);
             const currentNodesPushCount = this.pushCount;
+            // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
+            // This fixes the primitive indexing crash and saves thousands of redundant operations.
+            const [canR, canC] = getRC(canonicalPlayerPos);
             // For each push in pushes
             for (let i=0;i< currentNodesPushCount;i++) {
                 let readIdx = i * 3;
@@ -579,25 +583,13 @@ export class Solver {
                 if (!this.isValidPush(boxPos, dr, dc, boxPositions)){
                     continue;
                 }
-                // if (boxPos !== boxPos0){
-                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
-                //     console.log(`NOOO!! ${boxPos0}, ${boxPos}`)
-                //     throw new Error()
-                // }if (dr !== dr0){
-                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
-                //     console.log(`NOOO!! ${dr0}, ${dr}`)
-                // }if (dc !== dc0){
-                //     //throw new Error(`NOOO!! ${boxPos0}, ${boxPos}`)
-                //     console.log(`NOOO!! ${dc0}, ${dc}`)
-                // }
-
                 let [boxR, boxC] = getRC(boxPos);
                 let [newBoxR, newBoxC] = [boxR + dr, boxC + dc];
                 const newBoxPos = posInt(newBoxR, newBoxC);
 
-                const newBoxPositions: BoxPositions = new Uint32Array(boxPositions);
+                let newBoxPositions = boxPositions;
                 let pushedBoxIndex = newBoxPositions.indexOf(boxPos);
-                newBoxPositions[pushedBoxIndex] = newBoxPos;
+                newBoxPositions[pushedBoxIndex] = newBoxPos;   // Update to newBoxPos
 
                 // Run the flood fill directly on the shared set
                 const { playerPos: nextCanonicalInt } = this.floodRoom(boxPos, newBoxPositions, false);
@@ -613,21 +605,17 @@ export class Solver {
                 // 🚀 OPTIMIZATION 2: Check visited early!
                 if (visited.has(nextCanonicalHash)) {
                     // Roll back the shared set before skipping
-                    // boxPositions.delete(newBoxPos);
-                    // boxPositions.add(boxInt);
+                    boxPositions[pushedBoxIndex] = boxPos
                     continue;
                 }
+                newBoxPositions = new Uint32Array(boxPositions); // Create new copy in memory
+                boxPositions[pushedBoxIndex] = boxPos;   // Roll back the old boxPositions
 
                 // Log parent lineage mapping
                 const moveChar = getPushChar(dr, dc);
                 visited.set(nextCanonicalHash, { parentHash: currentCanonicalHash, move: moveChar, boxPos: boxPos });
-
                 // Calculate goal counter tracking adjustments
-                let dRawBoxCount = 0;
-                if (this.goalPositions.has(boxPos)) dRawBoxCount++;    
-                if (this.goalPositions.has(newBoxPos)) dRawBoxCount--; 
-                let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
-
+                let nextRawBoxCount = this.updateRawBoxCount(currentRawBoxCount, boxPos, newBoxPos);
                 // Push clean state to the frontier
                 queue.pushBack([nextCanonicalInt, newBoxPositions, nextRawBoxCount, nextCanonicalHash]);
             }
