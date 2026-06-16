@@ -1,5 +1,6 @@
 // import { range } from "./utils";
 // import { Deque } from "./Deque";
+import { MinQueue } from "./PriorityQueue.js";
 
 class Deque<T> {
     private data: (T | null)[] = []; // 👈 Use a fast native array
@@ -624,52 +625,92 @@ export class Solver {
     }
 
     // ============ Astar on move basis (naive) (NOT YET IMPLEMENTED) ===============
-    private solveAstar(progressCallback, isPrintBoard=false): SolveResult{
-        // THE QUEUE IS THE FRONTIER,[playerPos, boxPositions, BoxCount, StateHash]
-        const queue = new Deque<[PosInt, BoxPositions, BoxCount, StateHash]>();
-        const visited = new Map<StateHash, {parentHash: StateHash|null, move: CasedMove|''}>();
-        let nodesSearched = 0;
-        // const initialState: GameState = {
-        //     playerPos: this.initialPlayerPos,
-        //     boxPositions: this.initialBoxPositions
-        // };
-        const initialHash = this.getInitialHash(this.initialPlayerPos, this.initialBoxPositions);
-        queue.pushBack([this.initialPlayerPos, this.initialBoxPositions, this.initialRawBoxCount, initialHash]);
-        visited.set(initialHash, { parentHash: null, move: ''});
-        // THE QUEUE LOOP
-        while (queue.length > 0) {
-            const popped = queue.popFront();  if (!popped) break;
-            nodesSearched++;  if (nodesSearched % 1000 === 0) progressCallback({explored: nodesSearched});
+    // private solveAstar(progressCallback, isPrintBoard=false): SolveResult{
 
-            const [playerPos, boxPositions, currentRawBoxCount, currentHash] = popped;
-            if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
-                console.log(`node ${nodesSearched}:\n${this.printBoard(playerPos, boxPositions)}` ); 
-            // Check if solved   // Legacy check: this.isSolved(boxPositions)
-            if (  currentRawBoxCount === 0 ) {
-                // Reconstruct the path from the visited Map
-                const finalPath: string[] = [];
-                let curr = currentHash;
-                while (curr !== null) {
-                    const step = visited.get(curr)!;
-                    if (step.move) finalPath.push(step.move);
-                    curr = step.parentHash!;
-                }
-                return {type:'success', path: finalPath.reverse().join(''), nodesSearched: nodesSearched};
-            }
+    //     //const queue = new Deque<[PosInt, BoxPositions, number, StateHash]>();
+    //     const minQueue = new MinQueue(10000000);
+    //     const queueLookup: Map<number, [PosInt, BoxPositions, number, StateHash]> = new Map();
 
-            // --- UNPACK BOXES ONCE ---
-            this.updateBoxGridLookup(boxPositions);
+    //             console.log("I am liek BFSPush but worse")
+    //     const visited = new Map<StateHash, { parentHash: StateHash | null, move: string, boxPos: PosInt|null }>();
+    //     let nodesSearched = 0;
+    //     // 1. Compute the true canonical starting state
+    //     const { playerPos: initialCanonicalInt } = this.floodRoom(this.initialPlayerPos, this.initialBoxPositions, false);
+    //     const initialCanonicalHash = this.getInitialHash(initialCanonicalInt, this.initialBoxPositions);
+            
+    //     minQueue.push([initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
+    //     visited.set(initialCanonicalHash, { parentHash: null, move: '', boxPos: null });
 
-            for (const [nextPlayer, nextBoxes, move, dRawBoxCount, nextHash] of this.getNeighbors(playerPos, boxPositions, currentHash)) {
-                if ( visited.has(nextHash) ) continue;
-                // If not yet seen this next state then add to queue
-                visited.set(nextHash, { parentHash: currentHash, move: move });
-                let nextRawBoxCount = currentRawBoxCount + dRawBoxCount;
-                queue.pushBack([nextPlayer, nextBoxes, nextRawBoxCount, nextHash]);
-            }
-        }
-        return {type:'error', message: "Error: No solution found", nodesSearched: nodesSearched};
-    }
+    //     // THE MAIN SOLVER LOOP
+    //     while (minQueue.size > 0) {
+    //         const popped = minQueue.pop();   if (!popped) break;
+    //         nodesSearched++;
+    //         if (nodesSearched % 1000 === 0) progressCallback({ explored: nodesSearched });
+            
+    //         const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = popped;
+    //          // if(nodesSearched===8) console.log(`playPos at node ${nodesSearched}:`, getRC(canonicalPlayerPos))
+    //         if (isPrintBoard && 1 <=nodesSearched && nodesSearched <= 1000)
+    //             console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}` ); 
+    //         // 2. WIN CONDITION => Reconstruct the path
+    //         if ( currentRawBoxCount === 0) {
+    //             let finalPath = this.reconstructPath(visited, currentCanonicalHash);
+    //             return { type: 'success', path: finalPath, nodesSearched: nodesSearched };
+    //         }
+            
+    //         // 3. EXPAND NEIGHBORS: We need pushes here, so generatePushes defaults to true
+    //         this.floodRoom(canonicalPlayerPos, boxPositions);
+    //         const currentNodesPushCount = this.pushCount;
+    //         // 🚀 OPTIMIZATION: Unpack the current canonical player row/col OUTSIDE the loop
+    //         // This fixes the primitive indexing crash and saves thousands of redundant operations.
+    //         const [canR, canC] = getRC(canonicalPlayerPos);
+    //         // For each push in pushes
+    //         for (let i=0;i< currentNodesPushCount;i++) {
+    //             let readIdx = i * 3;
+    //             let boxPos = this.pushActions[readIdx];
+    //             let dr = this.pushActions[readIdx + 1];
+    //             let dc = this.pushActions[readIdx + 2];
+    //             if (!this.isValidPush(boxPos, dr, dc, boxPositions)){
+    //                 continue;
+    //             }
+    //             let [boxR, boxC] = getRC(boxPos);
+    //             let [newBoxR, newBoxC] = [boxR + dr, boxC + dc];
+    //             const newBoxPos = posInt(newBoxR, newBoxC);
+
+    //             let newBoxPositions = boxPositions;
+    //             let pushedBoxIndex = newBoxPositions.indexOf(boxPos);
+    //             newBoxPositions[pushedBoxIndex] = newBoxPos;   // Update to newBoxPos
+
+    //             // Run the flood fill directly on the shared set
+    //             const { playerPos: nextCanonicalInt } = this.floodRoom(boxPos, newBoxPositions, false);
+    //             const nextCanonicalPos = getRC(nextCanonicalInt);
+
+    //             // Calculate the Zobrist hash 
+    //             let nextCanonicalHash = currentCanonicalHash
+    //                 ^ this.boxZobristTable[boxR][boxC]       
+    //                 ^ this.boxZobristTable[newBoxR][newBoxC] 
+    //                 ^ this.playerZobristTable[canR][canC]   
+    //                 ^ this.playerZobristTable[nextCanonicalPos[0]][nextCanonicalPos[1]];
+
+    //             // 🚀 OPTIMIZATION 2: Check visited early!
+    //             if (visited.has(nextCanonicalHash)) {
+    //                 // Roll back the shared set before skipping
+    //                 boxPositions[pushedBoxIndex] = boxPos
+    //                 continue;
+    //             }
+    //             newBoxPositions = new Uint32Array(boxPositions); // Create new copy in memory
+    //             boxPositions[pushedBoxIndex] = boxPos;   // Roll back the old boxPositions
+
+    //             // Log parent lineage mapping
+    //             const moveChar = getPushChar(dr, dc);
+    //             visited.set(nextCanonicalHash, { parentHash: currentCanonicalHash, move: moveChar, boxPos: boxPos });
+    //             // Calculate goal counter tracking adjustments
+    //             let nextRawBoxCount = this.updateRawBoxCount(currentRawBoxCount, boxPos, newBoxPos);
+    //             // Push clean state to the frontier
+    //             minQueue.push([nextCanonicalInt, newBoxPositions, nextRawBoxCount, nextCanonicalHash]);
+    //         }
+    //     }
+    //     return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
+    // }
     // =========== SOLVE METHODS HANDLER =============
     public solve(method:string, progressCallback): SolveResult {
         // Catch the missing player error cleanly right here
@@ -684,6 +725,7 @@ export class Solver {
         switch (method){
             case 'bfs': return this.solveBFS(progressCallback, true);
             case 'bfs-push': return this.solveBFSPush(progressCallback, true);
+            //case 'astar': return this.solveAstar(progressCallback, true);
             default: return {type:"error", message:"Error: Invalid solve method", nodesSearched: 0};
         }
     }
