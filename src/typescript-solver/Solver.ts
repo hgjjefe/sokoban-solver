@@ -44,7 +44,7 @@ function stripEmptyRowsCols(gridText:string[]){
 type PosTup = [number, number];
 type PosInt = number;   // use (r << 16 | c) format for potential performance boost
 type PositionSet = Set<PosInt>;
-type BoxPositions = Uint32Array;
+type BoxPositions = Uint32Array; // The Fixed size array storing boxposes as PosInt
 type StateHash = bigint;
 interface GameState {
     playerPos: PosTup;
@@ -551,7 +551,6 @@ export class Solver {
         queue.pushBack([initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
         visited.set(initialCanonicalHash, { parentHash: null, move: '', boxPos: null });
 
-        
         // THE MAIN SOLVER LOOP
         while (queue.length > 0) {
             const popped = queue.popFront();   if (!popped) break;
