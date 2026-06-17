@@ -1,6 +1,6 @@
 # 🎮 Sokoban Solver & Game
 
-> A modern, responsive web-based Sokoban puzzle game with an unintelligent solver, level editor, and solution visualizer. Play classic push-the-box puzzles or let the AI solve them for you!
+> A modern, responsive web-based Sokoban puzzle game with an intelligent solver, level editor, and solution visualizer. Play classic push-the-box puzzles or let the AI solve them for you!
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Try_Now-blue?style=for-the-badge)](https://dangarfield.github.io/sokoban-solver/)
 
@@ -9,7 +9,7 @@
 ## ✨ Features
 
 ### 🎯 Game & Solver
-- **Unintelligent AI Solver** - Primitive BFS algorithm with unoptimized performance
+- **Intelligent AI Solver** - Primitive BFS algorithm with unoptimized performance
 - **Real-time Progress** - Watch the solver work with live progress updates
 - **Solution Playback** - Step through solutions move by move
 - ~~**Multiple Algorithms** - Choose from BFS, DFS, UCS, or A* search methods~~
