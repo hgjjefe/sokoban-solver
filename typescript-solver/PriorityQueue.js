@@ -1,3 +1,5 @@
+// From luciopaiva's heapify repository
+// https://github.com/luciopaiva/heapify/tree/main
 // this is just to make it clear that we are using a 1-based array; changing it to zero won't work without code changes
 const ROOT_INDEX = 1;
 export class MinQueue {

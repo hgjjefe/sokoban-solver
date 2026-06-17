@@ -1,48 +1,6 @@
-// import { range } from "./utils";
-// import { Deque } from "./Deque";
+//import { range, stripEmptyRowsCols } from "./utils.js";
+import { Deque } from "./Deque.js";
 import { MinQueue } from "./PriorityQueue.js";
-class Deque {
-    data = []; // 👈 Use a fast native array
-    head = 0;
-    tail = 0;
-    pushBack(item) {
-        this.data[this.tail] = item;
-        this.tail++;
-    }
-    popFront() {
-        if (this.head === this.tail)
-            return undefined;
-        const item = this.data[this.head];
-        this.data[this.head] = null; // 👈 Safely clear memory without breaking V8 optimization!
-        this.head++;
-        // Optional: Periodic cleanup if the array gets massively bloated
-        // if (this.head > 100000) {
-        //     this.data = this.data.slice(this.head);
-        //     this.tail -= this.head;
-        //     this.head = 0;
-        // }
-        return item ?? undefined;
-    }
-    constructor(arr = undefined) {
-        if (arr === undefined)
-            return;
-        for (let item of arr)
-            this.pushBack(item);
-    }
-    get length() {
-        return this.tail - this.head;
-    }
-}
-// GridText formatting Helpers
-const range = (n) => [...Array(n).keys()];
-function stripEmptyRowsCols(gridText) {
-    const res = gridText.filter(row => /\S/.test(row));
-    const gridWidth = res[0].length;
-    const rangeW = range(gridWidth);
-    const minCol = rangeW.findIndex(i => /\S/.test(res.map(row => row[i]).join('')));
-    const maxCol = rangeW.findLastIndex(i => /\S/.test(res.map(row => row[i]).join('')));
-    return res.map(row => row.slice(minCol, maxCol + 1));
-}
 const MOVES = {
     'U': [-1, 0], 'D': [1, 0], 'L': [0, -1], 'R': [0, 1],
     //  'u': [-1, 0], 'd': [1, 0], 'l': [0, -1], 'r': [0, 1]
@@ -68,8 +26,7 @@ function getRC(posInt) {
 }
 // Get packed positions orthogonally adjacent to the currentPos
 function getAdjPos(currentPos) {
-    let [r, c] = getRC(currentPos);
-    return [posInt(r - 1, c), posInt(r + 1, c), posInt(r, c - 1), posInt(r, c + 1)];
+    return [currentPos - 65536, currentPos + 65536, currentPos - 1, currentPos + 1];
 }
 function getAdjPosWithMove(currentPos) {
     let [r, c] = getRC(currentPos);
@@ -103,7 +60,9 @@ export class Solver {
     wallPositions = new Set();
     goalPositions = new Set();
     goalCount;
+    // STATIC ANALYSIS
     pushablePositions = new Set();
+    distanceMap = new Map();
     playerZobristTable = []; // For Zobrist Hashing
     boxZobristTable = [];
     // // FLOODFILL BUFFER DURING RUNNING
@@ -113,7 +72,6 @@ export class Solver {
     floodToken; // The current number indicating flood, can be 1,2,...,
     pushActions; // Every three elements are (boxPos, dr,dc), for storing nextPushes in floodRoom
     pushCount = 0;
-    canonicalPlayerPos = 0;
     constructor(board) {
         // board = stripEmptyRowsCols(board);
         this.board = board.map(row => row.split(''));
@@ -200,11 +158,47 @@ export class Solver {
         }
         return hash;
     }
-    // Some helpers
-    // private getStateKey(playerPos: PosTup, boxPositions: PositionSet): string {
-    //     const sortedBoxes = Array.from(boxPositions).sort().join(';');
-    //     return `${playerPos[0]},${playerPos[1]}|${sortedBoxes}`;
-    // }
+    // Use BFS to compute distance from each goal's distanceMap
+    precomputeDistances() {
+        for (const goal of this.goalPositions) {
+            const goalMap = new Map();
+            const queue = new Deque([goal]);
+            goalMap.set(goal, 0);
+            while (queue.length > 0) {
+                const current = queue.popFront();
+                const currentDist = goalMap.get(current);
+                // Generate 4 neighbors using your fast bitwise offsets
+                const neighbors = [current - 65536, current + 65536, current - 1, current + 1];
+                for (const neighbor of neighbors) {
+                    if (!this.wallPositions.has(neighbor) && !goalMap.has(neighbor)) {
+                        goalMap.set(neighbor, currentDist + 1);
+                        queue.pushBack(neighbor);
+                    }
+                }
+            }
+            this.distanceMap.set(goal, goalMap);
+        }
+    }
+    // For AStar Heuristics
+    getHeuristic(boxPositions) {
+        let totalHeuristic = 0;
+        for (const box of boxPositions) {
+            let minPushesToAnyGoal = Infinity;
+            for (const goal of this.goalPositions) {
+                const goalMap = this.distanceMap.get(goal);
+                const pushes = goalMap.get(box);
+                // If pushes is undefined, this box is in an un-reachable area (Deadlock!)
+                if (pushes === undefined) {
+                    return Infinity;
+                }
+                if (pushes < minPushesToAnyGoal) {
+                    minPushesToAnyGoal = pushes;
+                }
+            }
+            totalHeuristic += minPushesToAnyGoal;
+        }
+        return totalHeuristic;
+    }
     isSolved(boxPositions) {
         for (const box of boxPositions) {
             if (!this.goalPositions.has(box))
@@ -624,26 +618,29 @@ export class Solver {
     }
     // ============ Astar on move basis (naive) (NOT YET IMPLEMENTED) ===============
     solveAstar(progressCallback, isPrintBoard = false) {
+        this.precomputeDistances();
+        // console.log("Dmap:", this.distanceMap);
         //const queue = new Deque<[PosInt, BoxPositions, number, StateHash]>();
-        const queue = new MinQueue(10000000);
-        console.log("I am liek BFSPush but worse");
-        return;
+        const minQueue = new MinQueue(2000000);
+        const queueLookup = new Map();
+        let queueIdx = 1;
+        console.log("I am liek BFSPush but better");
         const visited = new Map();
         let nodesSearched = 0;
         // 1. Compute the true canonical starting state
         const { playerPos: initialCanonicalInt } = this.floodRoom(this.initialPlayerPos, this.initialBoxPositions, false);
         const initialCanonicalHash = this.getInitialHash(initialCanonicalInt, this.initialBoxPositions);
-        queue.pushBack([initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
+        minQueue.push(queueIdx, 0);
+        queueLookup.set(queueIdx++, [initialCanonicalInt, this.initialBoxPositions, this.initialRawBoxCount, initialCanonicalHash]);
         visited.set(initialCanonicalHash, { parentHash: null, move: '', boxPos: null });
         // THE MAIN SOLVER LOOP
-        while (queue.length > 0) {
-            const popped = queue.popFront();
-            if (!popped)
-                break;
+        while (minQueue.size > 0) {
+            const popped = minQueue.pop();
+            // console.log("popped", popped, minQueue._keys)
             nodesSearched++;
             if (nodesSearched % 1000 === 0)
                 progressCallback({ explored: nodesSearched });
-            const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = popped;
+            const [canonicalPlayerPos, boxPositions, currentRawBoxCount, currentCanonicalHash] = queueLookup.get(popped);
             // if(nodesSearched===8) console.log(`playPos at node ${nodesSearched}:`, getRC(canonicalPlayerPos))
             if (isPrintBoard && 1 <= nodesSearched && nodesSearched <= 1000)
                 console.log(`node ${nodesSearched}:\n${this.printBoard(canonicalPlayerPos, boxPositions)}`);
@@ -696,7 +693,8 @@ export class Solver {
                 // Calculate goal counter tracking adjustments
                 let nextRawBoxCount = this.updateRawBoxCount(currentRawBoxCount, boxPos, newBoxPos);
                 // Push clean state to the frontier
-                queue.pushBack([nextCanonicalInt, newBoxPositions, nextRawBoxCount, nextCanonicalHash]);
+                minQueue.push(queueIdx, this.getHeuristic(newBoxPositions));
+                queueLookup.set(queueIdx++, [nextCanonicalInt, newBoxPositions, nextRawBoxCount, nextCanonicalHash]);
             }
         }
         return { type: 'error', message: "Error: No solution found", nodesSearched: nodesSearched };
