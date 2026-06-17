@@ -631,15 +631,14 @@ const calculate = async () => {
         return;
     }
     else {
-        const savedLevels = JSON.parse(window.localStorage.getItem('sok'));
-        const savedLevel = savedLevels.find(l => l.name === LEVEL_DATA.current);
-        if (savedLevel === undefined) {
-            savedLevels.push({ name: LEVEL_DATA.current, grid: gridText, solution });
-        }
-        else {
-            savedLevel.solution = solution;
-        }
-        window.localStorage.setItem('sok', JSON.stringify(savedLevels));
+        // const savedLevels = JSON.parse(window.localStorage.getItem('sok'))
+        // const savedLevel = savedLevels.find(l => l.name === LEVEL_DATA.current)
+        // if (savedLevel === undefined) {
+        //   savedLevels.push({ name: LEVEL_DATA.current, grid: gridText, solution })
+        // } else {
+        //   savedLevel.solution = solution
+        // }
+        // window.localStorage.setItem('sok', JSON.stringify(savedLevels))
         level.solution = solution;
         LEVEL_DATA.solution.directions = solution;
         populateSolutionStates();
