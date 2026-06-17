@@ -1,6 +1,6 @@
 export function solveTypescript(gridText, progressCallback, timeoutMs = 60000, method = 'bfs', signal) {
     return new Promise((resolve, reject) => {
-        const worker = new Worker('./sokoban-solver/typescript-solver/solver-typescript.js', { type: 'module' });
+        const worker = new Worker('https://hgjjefe.github.io/sokoban-solver/typescript-solver/solver-typescript.js', { type: 'module' });
         worker.onmessage = (e) => {
             const { type, payload } = e.data;
             if (type === 'DEBUG') {
