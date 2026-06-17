@@ -128,7 +128,6 @@ export class Solver {
         this.initialBoxPositions = new Uint32Array(this.initialBoxPositionSet);
         this.boxGridLookup = new Uint8Array(this.rows * this.cols);
         this.updateBoxGridLookup(this.initialBoxPositions);
-        console.log("boxPositions", this.initialBoxPositions.map(b=>this.lookupIndex(b)))
         // Initialize flood queue for storing flooded tiles during by-push solving
         this.floodQueue = new Uint32Array(this.rows * this.cols);
         this.floodedGrid = new Uint32Array(this.rows * this.cols);
