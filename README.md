@@ -9,10 +9,10 @@
 ## ✨ Features
 
 ### 🎯 Game & Solver
-- **Intelligent AI Solver** - Primitive BFS algorithm with unoptimized performance
+- **Intelligent AI Solver** - A* algorithm with fast performance. Can't solve the bigger levels though
 - **Real-time Progress** - Watch the solver work with live progress updates
 - **Solution Playback** - Step through solutions move by move
-- ~~**Multiple Algorithms** - Choose from BFS, DFS, UCS, or A* search methods~~
+- **Multiple Algorithms** - Choose from BFS or A* search methods
 
 ### 🎨 Level Editor
 - **Visual Editor** - Click cells to cycle through floor, wall, block, target, and player
