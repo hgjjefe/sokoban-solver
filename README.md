@@ -47,9 +47,9 @@ python -m http.server 8000
 # or
 php -S localhost:8000
 
-Or use VSCode live server or whatever
-
 # Open http://localhost:8000 in your browser
+
+Or use VSCode live server or whatever
 ```
 
 ## 🎮 How to Play
@@ -80,24 +80,16 @@ Or use VSCode live server or whatever
 
 ## 🧠 Solver Algorithm
 
-The application uses **Festival**, a high-performance Sokoban solver that combines optimal search strategies with advanced pruning techniques.
+The application uses a **Typescript solver** I wrote with the assistance of Gemini. 
 
-### Festival Algorithm Overview
-Festival is a state-of-the-art solver originally developed in C++ by Yaron Shoham. This implementation is a Rust port compiled to WebAssembly for browser execution.
+### Solver Algorithm Overview
 
 **Key Features:**
-- **Pattern Database Heuristics** - Pre-computed lookup tables for accurate distance estimates
-- **Advanced Deadlock Detection** - Identifies unsolvable positions early (freeze deadlock, bipartite matching)
-- **Macro Moves** - Optimizes sequences of moves into single operations
-- **Transposition Tables** - Avoids re-exploring identical board states
-- **Lower Bound Pruning** - Eliminates branches that cannot lead to optimal solutions
-
-### Performance Optimizations
-- **Rust + WebAssembly** - Near-native performance in the browser (10-100x faster than JavaScript)
-- **Non-blocking UI** - Solver runs in a Web Worker without freezing the interface
-- **Real-time Progress** - Live updates on explored states and search progress
-- **Memory Efficient** - Optimized state representation and hash tables
-- **Optimal Solutions** - Finds shortest push solutions for most puzzles
+- **Simple BFS** - Find minimum moves solution but least effecient
+- **BFS by push** - Find minimum pushes solution. A bit more effecient
+- **A*** - Use box-goal distance as heuristics, so it searches the path that reduces total box-goal distance first. Most effecient, but the solution move sequence is weird
+- **Deadlock detection** - Only considers pushable floor space and avoids 2x2 freeze deadlocks
+- **Zobrist Hashing** - Store each explored board state as a 64-bit integer to avoid repeating the state
 
 ## 🎨 Level Format
 
@@ -139,11 +131,11 @@ Level: Medium Challenge
 #######
 ```
 
-## 🤝 Contributing
+~~## 🤝 Contributing~~
 
-This project builds upon excellent work from:
-- [KnightofLuna/sokoban-solver](https://github.com/KnightofLuna/sokoban-solver) - Original web interface
-- [Festival Solver](http://www.sokobano.de/wiki/index.php?title=Solver:Festival) - High-performance C++ solver by Yaron Shoham
+~~This project builds upon excellent work from:~~
+~~- [KnightofLuna/sokoban-solver](https://github.com/KnightofLuna/sokoban-solver) - Original web interface~~
+~~- [Festival Solver](http://www.sokobano.de/wiki/index.php?title=Solver:Festival) - High-performance C++ solver by Yaron Shoham~~
 
 ### Technology Stack
 - **Frontend**: Vanilla JavaScript, Bootstrap 5
